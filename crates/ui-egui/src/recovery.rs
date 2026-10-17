@@ -62,7 +62,7 @@ struct InstanceLock {
 
 impl Drop for InstanceLock {
     fn drop(&mut self) {
-        let _ = self.file.unlock();
+        let _ = unlock(&self.file);
         let _ = std::fs::remove_file(&self.path);
     }
 }
@@ -86,7 +86,7 @@ impl RecoveryStore {
             }
             let name = format!("instance-{}-{}.lock", std::process::id(), CLAIMS.fetch_add(1, Ordering::Relaxed));
             let path = self.dir.join(&name);
-            let locked = File::options().read(true).write(true).create(true).truncate(false).open(&path).and_then(|file| match file.try_lock() {
+            let locked = File::options().read(true).write(true).create(true).truncate(false).open(&path).and_then(|file| match try_lock(&file) {
                 Ok(()) => Ok(file),
                 Err(TryLockError::WouldBlock) => Err(std::io::Error::new(std::io::ErrorKind::WouldBlock, "held by another instance")),
                 Err(TryLockError::Error(e)) => Err(e),
@@ -128,10 +128,10 @@ impl RecoveryStore {
         }
         let path = self.dir.join(name);
         let Ok(file) = File::options().read(true).write(true).open(&path) else { return false };
-        match file.try_lock() {
+        match try_lock(&file) {
             Err(TryLockError::WouldBlock) => true,
             Ok(()) => {
-                let _ = file.unlock();
+                let _ = unlock(&file);
                 drop(file);
                 let _ = std::fs::remove_file(&path);
                 false
@@ -150,7 +150,9 @@ impl RecoveryStore {
             return Some(dir.join("Recovery"));
         }
         let env = |k: &str| std::env::var_os(k).filter(|v| !v.is_empty()).map(PathBuf::from);
-        if cfg!(target_os = "macos") {
+        if cfg!(target_os = "haiku") {
+            env("HOME").map(|h| h.join("config/settings/PdfCraft/Recovery"))
+        } else if cfg!(target_os = "macos") {
             env("HOME").map(|h| h.join("Library/Application Support/PdfCraft/Recovery"))
         } else if cfg!(windows) {
             env("LOCALAPPDATA").map(|d| d.join("PdfCraft").join("Recovery"))
@@ -384,4 +386,22 @@ impl PdfCraftApp {
             self.recovery_keys.clear();
         }
     }
+}
+
+#[cfg(not(target_os = "haiku"))]
+fn try_lock(file: &File) -> Result<(), TryLockError> {
+    file.try_lock()
+}
+#[cfg(not(target_os = "haiku"))]
+fn unlock(file: &File) -> std::io::Result<()> {
+    file.unlock()
+}
+#[cfg(target_os = "haiku")]
+fn try_lock(file: &File) -> Result<(), TryLockError> {
+    rustix::fs::flock(file, rustix::fs::FlockOperation::NonBlockingLockExclusive)
+        .map_err(|e| if e == rustix::io::Errno::WOULDBLOCK { TryLockError::WouldBlock } else { TryLockError::Error(e.into()) })
+}
+#[cfg(target_os = "haiku")]
+fn unlock(file: &File) -> std::io::Result<()> {
+    rustix::fs::flock(file, rustix::fs::FlockOperation::Unlock).map_err(Into::into)
 }

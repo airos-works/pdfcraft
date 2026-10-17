@@ -94,6 +94,7 @@ fn reveal_via(
 #[cfg(not(target_arch = "wasm32"))]
 fn reveal_command(platform: &str, path: &std::path::Path) -> Result<(&'static str, Vec<std::ffi::OsString>), String> {
     match platform {
+        "haiku" => Ok(("open", vec![path.parent().ok_or("The file has no parent directory")?.as_os_str().into()])),
         "windows" => {
             // Explorer uses /select,<object>, rather than a separate option value.
             let mut selection = std::ffi::OsString::from("/select,");

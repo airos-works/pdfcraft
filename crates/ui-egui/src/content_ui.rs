@@ -679,7 +679,7 @@ impl crate::PdfCraftApp {
             Some(p) if p.ends_with(".png") || p.ends_with(".jpg") => read(self, p.into()),
             Some(_) => {}
             None => {
-                let dialog = rfd::AsyncFileDialog::new()
+                let dialog = crate::file_dialog::AsyncFileDialog::new()
                     .add_filter(tl!("Images"), &["png", "jpg", "jpeg", "tif", "tiff", "gif", "bmp", "jp2", "j2k", "jpx"])
                     .set_title(title);
                 let target = self.active_ids().map(|(_, id)| id);
@@ -739,8 +739,8 @@ impl crate::PdfCraftApp {
         let copied = pixels.and_then(|(w, h, rgba)| {
             #[cfg(not(target_arch = "wasm32"))]
             if self.system_clipboard {
-                let img = arboard::ImageData { width: w as usize, height: h as usize, bytes: std::borrow::Cow::Borrowed(&rgba) };
-                arboard::Clipboard::new().and_then(|mut c| c.set_image(img)).map_err(|e| e.to_string())?;
+                let img = crate::clipboard::ImageData { width: w as usize, height: h as usize, bytes: std::borrow::Cow::Borrowed(&rgba) };
+                crate::clipboard::Clipboard::new().and_then(|mut c| c.set_image(img)).map_err(|e| e.to_string())?;
             }
             #[cfg(target_arch = "wasm32")]
             if self.system_clipboard {

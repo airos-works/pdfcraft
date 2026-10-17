@@ -4183,6 +4183,21 @@ name = "pdfcraft-geom"
 version = "0.8.0"
 
 [[package]]
+name = "pdfcraft-haiku"
+version = "0.8.0"
+dependencies = [
+ "cc",
+ "egui",
+ "image",
+ "log",
+ "pdfcraft-engine",
+ "pdfcraft-platform",
+ "pdfcraft-ui-egui",
+ "rayon",
+ "serde_json",
+]
+
+[[package]]
 name = "pdfcraft-js"
 version = "0.8.0"
 dependencies = [

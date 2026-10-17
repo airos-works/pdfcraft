@@ -137,3 +137,12 @@ Follow `CLAUDE.md`. It covers quality gates, layering, commit rules and how to r
   GitHub profiles). Never hand-edit `contributors.json`.
 - Maintainers refresh the stats with `python3 ../../craftrules/scripts/contributors.py .` (it also
   re-verifies who wrote each `people.toml` entry; `--check` only verifies).
+
+## air/OS fork platform boundary
+
+The owner requested an air/OS port using BeOS libraries and reuse of the existing
+craft ports (2026-10-18). As in those ports, `apps/pdfcraft-haiku/native/host.cpp`
+is the Be API boundary, with unsafe Rust restricted to its documented safe wrappers
+in `apps/pdfcraft-haiku/src/host.rs`. The host crate denies unsafe code everywhere
+else; the engine and UI retain the workspace prohibition. This is the scoped
+platform exception for this fork, not permission for unsafe document handling.

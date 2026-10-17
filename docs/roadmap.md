@@ -240,3 +240,11 @@ M2 (renderer), M7 (content editing), M10 (OCR and Office), M11 (Preflight and st
 | 2026-10-10 | minor | Added the alpha gate (six core workflows; convert and share fails → pre-alpha, 40–70 h to alpha) and rank 0 in the upcoming milestones |
 | 2026-10-12 | minor | M8: image redaction removes alternate images and unsupported masks only on affected images. Estimates unchanged. |
 | 2026-10-10 | major | Created from ROADMAP.md §Milestones, §Critical path, §Risks and §Where we're lacking. Merged the duplicated M1, M2, M3 and M14 rows, re-measured Done and Remaining, added Current focus and the ranked upcoming milestones |
+
+## air/OS fork
+
+| Milestone | State | Evidence |
+| --- | --- | --- |
+| Initial Be API port | Installed; initial validation passed | [Port notes](haiku.md); native cross-build and laptop runtime checks |
+
+- 2026-10-18: added the air/OS platform host; upstream feature estimates unchanged.

@@ -312,6 +312,37 @@ fn unix_fonts(files: &'static [&'static str]) -> Vec<PathBuf> {
 }
 
 fn unix_candidates(files: &[&str], installed: &[PathBuf]) -> Vec<PathBuf> {
+    #[cfg(target_os = "haiku")]
+    let installed = {
+        fn scan(dir: &Path, depth: usize, out: &mut Vec<PathBuf>) {
+            if depth == 0 || out.len() > 4096 {
+                return;
+            }
+            if let Ok(entries) = std::fs::read_dir(dir) {
+                for entry in entries.flatten() {
+                    if out.len() >= 4096 {
+                        break;
+                    }
+                    if entry.file_type().is_ok_and(|t| t.is_dir()) {
+                        scan(&entry.path(), depth - 1, out);
+                    } else {
+                        out.push(entry.path());
+                    }
+                }
+            }
+        }
+        let mut all = installed.to_vec();
+        for dir in [
+            "/boot/system/data/fonts",
+            "/boot/system/non-packaged/data/fonts",
+            "/boot/home/config/data/fonts",
+            "/boot/home/config/non-packaged/data/fonts",
+        ] {
+            scan(Path::new(dir), 4, &mut all);
+        }
+        all
+    };
+
     let mut paths: Vec<_> =
         ["/usr/share/fonts", "/usr/local/share/fonts"].iter().flat_map(|dir| files.iter().map(move |f| Path::new(dir).join(f))).collect();
     // Fontconfig may point into /nix/store or a user's font directory. Keep the existing

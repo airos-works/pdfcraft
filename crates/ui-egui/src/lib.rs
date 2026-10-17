@@ -28,6 +28,14 @@ macro_rules! tl_ctx {
     };
 }
 
+#[cfg(all(not(target_os = "haiku"), not(target_arch = "wasm32")))]
+use arboard as clipboard;
+#[cfg(not(target_os = "haiku"))]
+use rfd as file_dialog;
+#[cfg(target_os = "haiku")]
+pub mod native_services;
+#[cfg(target_os = "haiku")]
+use native_services::{clipboard, file_dialog};
 mod a11y_ui;
 mod actions_ui;
 mod appearance;
@@ -1528,7 +1536,7 @@ impl PdfCraftApp {
             (Ok(bytes), false) => {
                 #[cfg(not(target_arch = "wasm32"))]
                 self.ask_one(
-                    pickers::Ask::Save(rfd::AsyncFileDialog::new().set_file_name(crate::files::attachment_file_name(&att.name))),
+                    pickers::Ask::Save(crate::file_dialog::AsyncFileDialog::new().set_file_name(crate::files::attachment_file_name(&att.name))),
                     None,
                     move |app, path| match crate::editing::write_atomically(&path.to_string_lossy(), &bytes) {
                         Ok(()) => app.notify_fmt("Saved {name}", &[("name", &path.display().to_string())]),
@@ -1838,8 +1846,10 @@ impl PdfCraftApp {
 
     /// The File ▸ Open picker: PDFs, and images and text that become PDFs.
     #[cfg(not(target_arch = "wasm32"))]
-    fn open_picker() -> rfd::AsyncFileDialog {
-        rfd::AsyncFileDialog::new().add_filter("PDF", &["pdf"]).add_filter(tl!("Images and text (converted to PDF)"), &create_ui::CONVERTIBLE)
+    fn open_picker() -> crate::file_dialog::AsyncFileDialog {
+        crate::file_dialog::AsyncFileDialog::new()
+            .add_filter("PDF", &["pdf"])
+            .add_filter(tl!("Images and text (converted to PDF)"), &create_ui::CONVERTIBLE)
     }
 
     pub fn open_dialog(&mut self) {
@@ -1847,7 +1857,9 @@ impl PdfCraftApp {
         #[cfg(not(target_arch = "wasm32"))]
         self.pick(
             pickers::PickFor::Open,
-            rfd::AsyncFileDialog::new().add_filter("PDF", &["pdf"]).add_filter(tl!("Images and text (converted to PDF)"), &create_ui::CONVERTIBLE),
+            crate::file_dialog::AsyncFileDialog::new()
+                .add_filter("PDF", &["pdf"])
+                .add_filter(tl!("Images and text (converted to PDF)"), &create_ui::CONVERTIBLE),
             true,
         );
         // Browsers pick files asynchronously; the bytes arrive through `inbox`.
@@ -1856,7 +1868,7 @@ impl PdfCraftApp {
             let inbox = self.inbox.clone();
             let ctx = self.ctx.clone();
             wasm_bindgen_futures::spawn_local(async move {
-                if let Some(h) = rfd::AsyncFileDialog::new()
+                if let Some(h) = crate::file_dialog::AsyncFileDialog::new()
                     .add_filter("PDF", &["pdf"])
                     .add_filter(tl!("Images and text"), &create_ui::CONVERTIBLE)
                     .pick_file()
@@ -2894,11 +2906,11 @@ impl PdfCraftApp {
     }
 }
 
-impl eframe::App for PdfCraftApp {
+impl PdfCraftApp {
     /// While files are dragged over the window the system sends no pointer moves, so egui
     /// would keep the place the pointer entered at: tell it where the pointer really is, so the
     /// page grid can show (and use) the gap under it.
-    fn raw_input_hook(&mut self, ctx: &egui::Context, raw: &mut egui::RawInput) {
+    pub fn raw_input_hook(&mut self, ctx: &egui::Context, raw: &mut egui::RawInput) {
         // Before egui reads this frame's wheel input.
         self.scroll_speed.apply(ctx, raw);
         if raw.hovered_files.is_empty() && raw.dropped_files.is_empty() {
@@ -2910,11 +2922,7 @@ impl eframe::App for PdfCraftApp {
         ctx.request_repaint();
     }
 
-    fn save(&mut self, storage: &mut dyn eframe::Storage) {
-        storage.set_string("pdfcraft", self.persist());
-    }
-
-    fn logic(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+    pub fn logic(&mut self, ctx: &egui::Context) {
         self.ctx = Some(ctx.clone());
         self.dialog_epoch();
         // Notices raised outside `ui` (opened files, OS events, the control channel) translate too.
@@ -3072,7 +3080,7 @@ impl eframe::App for PdfCraftApp {
         self.process_picked();
     }
 
-    fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+    pub fn ui(&mut self, ui: &mut egui::Ui) {
         let ctx = ui.ctx().clone();
         i18n::set_current(i18n::Lang::from_pref(&self.language));
         // Fonts registered via set_fonts only take effect next frame; named families would panic now.
@@ -3181,5 +3189,21 @@ impl PdfCraftApp {
                 view.finish_render_frame(ctx, &doc.info, &doc.renderer);
             }
         }
+    }
+}
+
+#[cfg(not(target_os = "haiku"))]
+impl eframe::App for PdfCraftApp {
+    fn raw_input_hook(&mut self, ctx: &egui::Context, raw: &mut egui::RawInput) {
+        Self::raw_input_hook(self, ctx, raw);
+    }
+    fn logic(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        Self::logic(self, ctx);
+    }
+    fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+        Self::ui(self, ui);
+    }
+    fn save(&mut self, storage: &mut dyn eframe::Storage) {
+        storage.set_string("pdfcraft", self.persist());
     }
 }

@@ -78,7 +78,9 @@ fn clipboard_dir() -> Option<std::path::PathBuf> {
         return Some(dir.join("Clipboard"));
     }
     let env = |k: &str| std::env::var_os(k).filter(|v| !v.is_empty()).map(PathBuf::from).filter(|p| p.is_absolute());
-    if cfg!(target_os = "macos") {
+    if cfg!(target_os = "haiku") {
+        env("HOME").map(|h| h.join("config/cache/PdfCraft/Clipboard"))
+    } else if cfg!(target_os = "macos") {
         env("HOME").map(|h| h.join("Library/Caches/PdfCraft/Clipboard"))
     } else if cfg!(windows) {
         env("LOCALAPPDATA").map(|d| d.join("PdfCraft").join("Clipboard"))
@@ -199,7 +201,7 @@ impl PdfCraftApp {
         }
         let dir = clipboard_dir().ok_or("there is no folder for the copied file")?;
         let path = write_clipboard_file(&dir, name, bytes)?;
-        arboard::Clipboard::new().and_then(|mut c| c.set().file_list(&[path])).map_err(|e| e.to_string())
+        crate::clipboard::Clipboard::new().and_then(|mut c| c.set().file_list(&[path])).map_err(|e| e.to_string())
     }
 
     #[cfg(target_arch = "wasm32")]

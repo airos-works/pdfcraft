@@ -1,0 +1,25 @@
+// PdfCraft's Haiku resources: signature, launch behaviour, version, icon and
+// the PDF types Tracker offers it for. Compiled with rc and added with
+// xres by tools/haiku/package.sh.
+
+resource app_signature "application/x-vnd.storytold-PdfCraft";
+
+// Each PDF opened from Tracker starts a window of its own process, as on
+// the other desktops; files opened while it runs arrive as B_REFS_RECEIVED.
+resource app_flags B_MULTIPLE_LAUNCH;
+
+resource app_version {
+	major = 0,
+	middle = 8,
+	minor = 0,
+	variety = B_APPV_DEVELOPMENT,
+	internal = 1,
+	short_info = "PdfCraft 0.8.0",
+	long_info = "PdfCraft for air/OS: an open-source PDF reader and editor (MIT or Apache-2.0)."
+};
+
+resource vector_icon {
+	import "PdfCraft.hvif"
+};
+
+resource file_types message { "types" = "application/pdf" };

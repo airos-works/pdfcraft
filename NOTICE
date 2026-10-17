@@ -58,3 +58,8 @@ dependencies change (plan/adr/0002, 0006).
 Vendored (vendor/, patched; see vendor/README.md):
 - hayro 0.7.1 — Apache-2.0 OR MIT, Copyright the hayro authors (licence files kept in vendor/hayro).
 - hayro-interpret 0.7.0 — Apache-2.0 OR MIT, Copyright the hayro authors (LICENSE-APACHE, LICENSE-MIT kept in vendor/hayro-interpret).
+
+The air/OS native host, input mapping, CPU rasterizer and build tooling are adapted
+from jmgasper/deckcraft, jmgasper/gridcraft and jmgasper/wordcraft (2026), under
+MIT OR Apache-2.0. tools/haiku/hvif.py originates in jmgasper/burrow (MIT; 2026
+Burrow contributors). See docs/haiku.md for the port's architecture and limits.

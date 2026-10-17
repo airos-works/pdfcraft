@@ -1,11 +1,7 @@
-<p align="center">
-  <a href="https://getartcraft.com/">
-    <picture>
-      <source media="(prefers-color-scheme: dark)" srcset="docs/brand/artcraft-logo-white.svg">
-      <img alt="ArtCraft" src="docs/brand/artcraft-logo.svg" width="200">
-    </picture>
-  </a>
-</p>
+# PdfCraft for air/OS
+
+Initial native Be API port. Build and validation instructions: [docs/haiku.md](docs/haiku.md).
+Based on upstream PdfCraft; this is an independent modified fork.
 
 
 <h1 align="center">PdfCraft</h1>
@@ -35,11 +31,6 @@
 
 <br>
 
-<p align="center">
-  <img src="docs/images/pdfcraft-viewer.png" alt="PdfCraft with the PdfCraft Showcase cover page open, the All tools panel on the left and 20 threaded comments on the right" width="100%">
-  <br>
-  <sub>The PdfCraft Showcase, a 13-page specimen PDF, open with the All tools panel and threaded comments.</sub>
-</p>
 
 > [!NOTE]
 > **ArtCraft is a community of artists from all walks of life.** Digital, generative, music,
@@ -105,27 +96,12 @@ No account, no telemetry, no cloud. It works offline and opens instantly. The en
 
 PdfCraft renders PDFs with care for the details that make a page feel right: kerning and ligatures, right-to-left and complex scripts, vertical CJK, colour emoji, shadings, blend modes, soft masks and optional content.
 
-<p align="center">
-  <img src="docs/images/pdfcraft-scripts.png" alt="The Scripts of the World page: Arabic, Hebrew, Devanagari, Thai, Greek, Cyrillic, Chinese, Korean, IPA, Armenian, Georgian and Tamil samples, with vertical Japanese in the right margin" width="100%">
-  <br>
-  <sub>Twelve writing systems on one page, plus vertical Japanese, at 125%.</sub>
-</p>
 
 - **Deep zoom stays sharp.** Large pages render in tiles, so text stays crisp at any magnification.
 - **Built to survive bad files.** Every page renders in isolation and damaged documents are repaired. Across the 983-file pdf.js test corpus the result is 0 crashes.
 - **Layouts for every task:** continuous, single page, two-up, view rotation, full screen and a distraction-free Read mode.
 - **Light and dark themes**, both designed to be easy on the eyes for long sessions.
 
-<table>
-<tr>
-<td width="50%"><img src="docs/images/pdfcraft-twoup.png" alt="Two facing pages in Read mode with the dark theme: the Foreword and the Setting Text chapter with its drop cap and pull quote"></td>
-<td width="50%"><img src="docs/images/pdfcraft-dark.png" alt="The dark theme showing the Code and Images chapter, a syntax-coloured listing and a fractal image, with the comments panel open"></td>
-</tr>
-<tr>
-<td align="center"><sub>Two-up Read mode, ready for long reading</sub></td>
-<td align="center"><sub>The dark theme, with the comments panel open</sub></td>
-</tr>
-</table>
 
 ## Find it, select it, copy it
 
@@ -137,16 +113,6 @@ Right-click a PDF tab to close it, reopen the last closed file-backed tab, or re
 
 Bookmarks, page thumbnails and the document's own page labels (i, ii, 1, 2…) keep you oriented in long documents. Search bookmark titles in the Bookmarks panel to find nested entries even when their parents are collapsed. Matches keep their ancestors for context; Clear restores the unfiltered tree without changing its expansion state.
 
-<table>
-<tr>
-<td width="50%"><img src="docs/images/pdfcraft-find.png" alt="The find bar showing match 10 of 16 for the word 'type', highlighted in the Expressive Type chapter heading"></td>
-<td width="50%"><img src="docs/images/pdfcraft-bookmarks.png" alt="The Bookmarks panel showing the nested outline of the showcase, with page labels such as Cover, i and ii, next to the Scripts of the World page"></td>
-</tr>
-<tr>
-<td align="center"><sub>Find as you type: match 10 of 16</sub></td>
-<td align="center"><sub>Nested bookmarks with the document's own page labels</sub></td>
-</tr>
-</table>
 
 ---
 
@@ -157,15 +123,6 @@ Open **Organize pages** to see every page at once:
 - **Change them:** rotate, delete, insert blank pages, insert pages from another file, and move them earlier or later.
 - **Undo anything:** <kbd>⌘Z</kbd>, then save.
 
-<p align="center">
-  <img src="docs/images/pdfcraft-organize.png" alt="The Organize pages grid with the showcase's pages as thumbnails, three of them selected, and the page toolbar above" width="100%">
-  <br>
-  <sub>Organize pages with three pages selected and the page tools in the toolbar above.</sub>
-</p>
-
-<table>
-<tr>
-<td width="50%" valign="top">
 
 **Undo that goes the distance.** Each change is one step in a history you can walk backwards and forwards. The Edit menu names the step ("Undo Rotate pages"), and undo still works after you save.
 
@@ -177,11 +134,6 @@ Open **Organize pages** to see every page at once:
 When open documents exceed the window width, scroll over the tab strip with the mouse wheel or trackpad, or use its horizontal scrollbar. Opening or switching to a document brings its tab into view.
 
 Unsaved documents carry a dot on their tab, and closing or quitting asks before anything is lost. Changes are autosaved every minute. If PdfCraft ever quits unexpectedly, it offers to recover your work the next time it opens. Encrypted documents stay encrypted on disk.
-
-</td>
-<td width="50%" valign="top"><img src="docs/images/pdfcraft-split.png" alt="The Split document dialog over the organize view, set to one page per file and reporting that it creates 13 files from 13 pages"><br><sub>Split document: one page per file makes 13 files.</sub></td>
-</tr>
-</table>
 
 ## Combine and split without losing a thing
 
@@ -214,28 +166,15 @@ PdfCraft implements the PDF standard security handler completely:
 
 Documents restricted by their author show a clear notice, and PdfCraft honours their permissions. Enter the owner password and the restrictions lift. Edits to encrypted documents are saved encrypted, under the same keys.
 
-<table>
-<tr>
-<td width="50%" valign="top"><img src="docs/images/pdfcraft-properties.png" alt="The Document Properties dialog on its Description tab, with editable title, author, subject and keywords, and tabs for Security, Fonts and Advanced"><br><sub>Document Properties, Description tab</sub></td>
-<td width="50%" valign="top">
-
 **Document Properties** shows:
 - the document's title, author, subject and keywords, which you can edit;
 - the fonts it uses and whether each is embedded;
 - PDF version, page size, tags, fields, layers and attachments;
 - the full security picture: encryption method, which password opened it, and each permission.
 
-</td>
-</tr>
-</table>
-
 ## Comments, forms, layers and attachments
 
 <table>
-<tr>
-<td width="50%"><img src="docs/images/pdfcraft-forms.png" alt="The Interactive Form page with highlighted text fields, checkboxes, radio buttons, a list and a signature field, and the Fields panel listing all 13 fields and their values"></td>
-<td width="50%"><img src="docs/images/pdfcraft-layers.png" alt="The Review and Markup page with highlights, shapes, ink and an APPROVED stamp under a DRAFT watermark, and the Layers panel with Draft watermark and Print-only notes"></td>
-</tr>
 <tr>
 <td valign="top"><b>Forms</b>: every field with its current value, field highlighting, and checkboxes, radio buttons, lists and signatures drawn the way their author designed them.</td>
 <td valign="top"><b>Layers</b>: switch optional content on and off and the page re-renders instantly. <b>Comments</b> appear as threaded conversations, and <b>attachments</b> can be opened or saved.</td>
@@ -246,16 +185,6 @@ Documents restricted by their author show a clear notice, and PdfCraft honours t
 
 Press <kbd>⌘K</kbd> to search every tool and command, or browse the **All tools** catalogue. Tools that are still in development are marked with the milestone that will ship them.
 
-<table>
-<tr>
-<td width="50%"><img src="docs/images/pdfcraft-palette.png" alt="The command palette searching for 'page', listing Page grid, Page labels, Rotate pages, Insert pages, Delete pages, Extract pages and more, each with the tool it belongs to"></td>
-<td width="50%"><img src="docs/images/pdfcraft-tools.png" alt="The Welcome to PdfCraft home screen with recommended tools, a recent file, a privacy note, and the full tool catalogue in the side panel"></td>
-</tr>
-<tr>
-<td align="center"><sub>The <kbd>⌘K</kbd> command palette</sub></td>
-<td align="center"><sub>The home screen and the All tools catalogue</sub></td>
-</tr>
-</table>
 
 ---
 
@@ -584,7 +513,6 @@ Forks and modified versions must remove them.
 <sub>Adobe, Photoshop, Illustrator, Premiere Pro, Lightroom, Acrobat, After Effects and InDesign are trademarks or registered trademarks of Adobe Inc. in the United States and/or other countries. PdfCraft is an independent, open-source project and is not affiliated with, sponsored by or endorsed by Adobe Inc.; these names are used only to describe the workflows it is compatible with.</sub>
 
 <p align="center">
-  <a href="https://getartcraft.com/"><img alt="ArtCraft" src="docs/brand/artcraft-mark.svg" width="28"></a><br>
   <sub>Made by the <a href="https://getartcraft.com/">ArtCraft</a> team and community.</sub>
 </p>
 
