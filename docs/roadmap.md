@@ -246,5 +246,7 @@ M2 (renderer), M7 (content editing), M10 (OCR and Office), M11 (Preflight and st
 | Milestone | State | Evidence |
 | --- | --- | --- |
 | Initial Be API port | Installed; initial validation passed | [Port notes](haiku.md); native cross-build and laptop runtime checks |
+| Tracker document launch | Fixed in package revision 3 | [Launch validation](haiku.md#validation); revision 2 fails, revision 3 opens the PDF through Tracker and Open With |
 
 - 2026-10-18: added the air/OS platform host; upstream feature estimates unchanged.
+- 2026-10-18: fixed packaged executable metadata for Tracker document launches.

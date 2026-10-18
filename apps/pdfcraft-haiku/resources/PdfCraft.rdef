@@ -4,6 +4,11 @@
 
 resource app_signature "application/x-vnd.storytold-PdfCraft";
 
+// BRoster needs this before launch to pre-register the application and deliver
+// Tracker's initial file refs. Package the attribute; the installed executable
+// is read-only, so relying on mimeset to add it after installation is too late.
+resource(2, "BEOS:TYPE") #'MIMS' "application/x-vnd.Be-elfexecutable";
+
 // Each PDF opened from Tracker starts a window of its own process, as on
 // the other desktops; files opened while it runs arrive as B_REFS_RECEIVED.
 resource app_flags B_MULTIPLE_LAUNCH;
