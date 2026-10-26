@@ -1,5 +1,7 @@
 # PdfCraft roadmap
 
+**air/OS icon update, 2026-10-26:** original Haiku-style native vector icon, with reproducible HVIF/SVG generation and a package revision bump. Validated with Haiku resource compilation and native renders from 16 to 256px; see [native icon](docs/haiku.md#native-application-icon-2026-10-26).
+
 **Stage: alpha** · next: beta, ~25% (ready for real work 50% → 75%) and ~400–700 h away
 
 > **Last reviewed:** 2026-10-15 · **Last updated:** 2026-10-15 · **Change:** minor (M6: AcroForm XML text; estimates unchanged)
