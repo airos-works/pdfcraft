@@ -44,7 +44,7 @@ fn pick(dialog: AsyncFileDialog) -> Vec<PathBuf> {
     } else {
         &dialog.title
     };
-    host::file_panel(id, dialog.mode, &dialog.name, &extensions, &format!("PdfCraft: {title}"));
+    host::file_panel(id, dialog.mode, &dialog.name, &dialog.directory, &extensions, &format!("PdfCraft: {title}"));
     let paths = rx.recv().unwrap_or_default();
     if dialog.mode == 1
         && let Ok(mut saved) = SAVED.lock()

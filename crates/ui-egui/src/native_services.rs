@@ -21,6 +21,8 @@ pub mod file_dialog {
         pub title: String,
         pub name: String,
         pub extensions: Vec<String>,
+        /// The folder the panel opens in; empty for the panel's own choice.
+        pub directory: String,
         /// 0: file, 1: save, 2: directory, 3: multiple files.
         pub mode: i32,
     }
@@ -40,6 +42,10 @@ pub mod file_dialog {
         }
         pub fn set_file_name(mut self, name: impl Into<String>) -> Self {
             self.name = name.into();
+            self
+        }
+        pub fn set_directory(mut self, dir: impl AsRef<std::path::Path>) -> Self {
+            self.directory = dir.as_ref().to_string_lossy().into_owned();
             self
         }
         pub fn add_filter(mut self, _label: impl Into<String>, extensions: &[impl ToString]) -> Self {

@@ -140,6 +140,8 @@ OPTIONS:
         let ctx = egui::Context::default();
         ctx.set_embed_viewports(true);
         let mut app = PdfCraftApp::new();
+        // First start (or settings from before Units existed): the region's unit, as the desktop app.
+        app.units = pdfcraft_ui_egui::units::Unit::system();
         if prefs_enabled()
             && let Some(dir) = config_dir()
             && let Ok(json) = std::fs::read_to_string(dir.join("ui.json"))
@@ -167,6 +169,9 @@ OPTIONS:
         {
             app.enable_recovery(pdfcraft_ui_egui::RecoveryStore::new(dir));
         }
+        // With Preferences ▸ Reopen last session on, last session's files come back first; files
+        // named on the command line (Tracker's) open after them, in front, as on the desktop.
+        app.reopen_last_files(&args.files);
         for f in &args.files {
             app.open_path(f);
         }

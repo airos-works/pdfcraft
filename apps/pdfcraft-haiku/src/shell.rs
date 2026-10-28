@@ -36,7 +36,7 @@ pub struct Shell {
     repaint_at: Option<Instant>,
     /// When other threads asked for one (`request_repaint` from a worker).
     woken_for: Arc<Mutex<Option<Instant>>>,
-    screenshots: Vec<egui::UserData>,
+    screenshots: Vec<egui::ScreenshotCallback>,
     title: String,
 }
 
@@ -219,6 +219,8 @@ impl Shell {
                 self.set_modifiers(ev.modifiers);
                 self.events.push(Event::MouseWheel {
                     unit: egui::MouseWheelUnit::Line,
+                    // B_MOUSE_WHEEL_CHANGED reports whole notches.
+                    source: egui::MouseWheelSource::Wheel,
                     delta: vec2(-ev.dx, -ev.dy),
                     phase: egui::TouchPhase::Move,
                     modifiers: self.modifiers,
@@ -355,6 +357,8 @@ impl Shell {
                     }
                 }
                 egui::OutputCommand::CopyImage(img) => copy_image(img),
+                // X11's PRIMARY selection; Haiku has only the clipboard.
+                egui::OutputCommand::TextSelectionSettled(_) => {}
                 egui::OutputCommand::OpenUrl(u) => {
                     if !host::open_url(&u.url) {
                         log::warn!("couldn't open {}", u.url);
@@ -407,9 +411,8 @@ impl Shell {
         self.raster.free_textures(&out.textures_delta);
         // Applied: epaint checks (in debug builds) that no texture update is dropped unhandled.
         out.textures_delta.clear();
-        for user_data in std::mem::take(&mut self.screenshots) {
-            let image = Arc::new(self.raster.image());
-            self.events.push(Event::Screenshot { viewport_id: ViewportId::ROOT, user_data, image });
+        for screenshot in std::mem::take(&mut self.screenshots) {
+            screenshot.complete(Arc::new(self.raster.image()));
             delay = Duration::ZERO;
         }
         if (ppp - self.ppp).abs() > f32::EPSILON {

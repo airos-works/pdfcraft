@@ -4461,6 +4461,7 @@ name = "pdfcraft-haiku"
 version = "0.15.0"
 dependencies = [
  "cc",
+ "chrono",
  "egui",
  "image",
  "log",

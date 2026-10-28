@@ -15,6 +15,18 @@ which incorporates the WordCraft and GridCraft ports. PdfCraft keeps its own
 application logic and authenticated control protocol. The existing eframe host
 calls the same frame hooks on other platforms.
 
+Upstream is merged into `main` (never rebased). The 2026-10-29 merge of upstream
+`222a1246` (0.15.0, egui 0.37, `crates/ui-egui` split into `app/`, `canvas/`,
+`platform/`, `workflows/` and other modules) kept the same seams: every picker and
+clipboard call goes through `crate::file_dialog` / `crate::clipboard` (rfd and
+arboard elsewhere, `native_services` on air/OS), `PdfCraftApp` has inherent
+`raw_input_hook`/`logic`/`ui` methods that the eframe `App` wraps, and eframe, rfd
+and arboard are not dependencies on Haiku. Pickers can now open in a folder
+(`set_directory`, used by Save As for the document's own folder), passed to
+`BFilePanel::SetPanelDirectory`. Like the desktop app, the host starts with the
+region's measurement unit and reopens the last session when that preference is on.
+Package `0.15.0~airos1-1` is the first build of this merge.
+
 The host uses `BApplication`, `BWindow`, `BView`, `BBitmap`, `BFilePanel`,
 `BClipboard`, `BCursor`, `BLocaleRoster` and `BMimeType`. The interface is drawn by
 the siblings' CPU rasterizer with dirty bands and air/OS display density support.
@@ -42,7 +54,7 @@ Rust target, so the script builds std with `-Zbuild-std` and `RUSTC_BOOTSTRAP=1`
 The release retains panic unwinding for upstream's document error guards.
 
 Outputs are `target/x86_64-unknown-haiku/release/PdfCraft`, `pdfcraft-cli` beside
-it, and `artifacts/haiku/pdfcraft-0.8.0~airos1-3-x86_64.hpkg`. Install with
+it, and `artifacts/haiku/pdfcraft-<version>-x86_64.hpkg` (the version in `apps/pdfcraft-haiku/resources/PdfCraft.PackageInfo`). Install with
 `pkgman install <package>`. The application appears in the Deskbar Applications
 menu and registers for PDFs without replacing an existing preferred PDF viewer.
 

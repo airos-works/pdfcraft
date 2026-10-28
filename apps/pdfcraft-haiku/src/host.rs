@@ -81,7 +81,7 @@ unsafe extern "C" {
     fn pc_clipboard_get(mime: *const c_char, len: *mut usize) -> *mut c_void;
     fn pc_clipboard_set(text: *const c_char, text_len: usize, html: *const c_char, html_len: usize) -> i32;
     fn pc_clipboard_set_picture(mime: *const c_char, data: *const c_void, len: usize) -> i32;
-    fn pc_host_file_panel(id: i32, save: i32, name: *const c_char, extensions: *const c_char, title: *const c_char) -> i32;
+    fn pc_host_file_panel(id: i32, save: i32, name: *const c_char, directory: *const c_char, extensions: *const c_char, title: *const c_char) -> i32;
     fn pc_host_open_url(url: *const c_char) -> i32;
     fn pc_host_alert(title: *const c_char, text: *const c_char);
     fn pc_host_type_file(path: *const c_char) -> i32;
@@ -370,11 +370,12 @@ pub fn clipboard_set_picture(mime: &str, data: &[u8]) -> bool {
 }
 
 /// Shows an Open panel (offering `extensions`; `*` is any file) or a Save panel (suggesting
-/// `name`); the answer comes back as a [`kind::DIALOG_ANSWER`] event with `id`.
-pub fn file_panel(id: i32, mode: i32, name: &str, extensions: &[&str], title: &str) {
-    let (n, e, t) = (c(name), c(&extensions.join("\n")), c(title));
+/// `name`), in `directory` unless that is empty; the answer comes back as a
+/// [`kind::DIALOG_ANSWER`] event with `id`.
+pub fn file_panel(id: i32, mode: i32, name: &str, directory: &str, extensions: &[&str], title: &str) {
+    let (n, d, e, t) = (c(name), c(directory), c(&extensions.join("\n")), c(title));
     // SAFETY: valid C strings; the host copies them.
-    unsafe { pc_host_file_panel(id, mode, n.as_ptr(), e.as_ptr(), t.as_ptr()) };
+    unsafe { pc_host_file_panel(id, mode, n.as_ptr(), d.as_ptr(), e.as_ptr(), t.as_ptr()) };
 }
 
 /// Opens a URL with its preferred application.

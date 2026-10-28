@@ -1119,8 +1119,9 @@ PositionPanel(BFilePanel* panel)
 // PC_DIALOG_ANSWER event with the id.
 int32_t
 pc_host_file_panel(int32_t id, int32_t save, const char* name,
-	const char* extensions, const char* title)
+	const char* directory, const char* extensions, const char* title)
 {
+	bool inDirectory = directory != NULL && directory[0] != '\0';
 	BMessenger target(be_app);
 	if (save == 1) {
 		if (sSavePanel == NULL) {
@@ -1131,6 +1132,8 @@ pc_host_file_panel(int32_t id, int32_t save, const char* name,
 		message.AddInt32(kDialogField, id);
 		sSavePanel->SetMessage(&message);
 		sSavePanel->SetSaveText(name != NULL ? name : "");
+		if (inDirectory)
+			sSavePanel->SetPanelDirectory(directory);
 		if (sSavePanel->Window()->Lock()) {
 			sSavePanel->Window()->SetTitle(title);
 			sSavePanel->Window()->Unlock();
@@ -1151,6 +1154,8 @@ pc_host_file_panel(int32_t id, int32_t save, const char* name,
 	BMessage message(B_REFS_RECEIVED);
 	message.AddInt32(kDialogField, id);
 	sOpenPanel->SetMessage(&message);
+	if (inDirectory)
+		sOpenPanel->SetPanelDirectory(directory);
 	if (sOpenPanel->Window()->Lock()) {
 		sOpenPanel->Window()->SetTitle(title);
 		sOpenPanel->Window()->Unlock();

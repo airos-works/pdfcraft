@@ -366,7 +366,9 @@ impl PdfCraftApp {
                     Some(dir) => convert(self, std::path::PathBuf::from(dir)),
                     None => {
                         self.ask_one(
-                            crate::pickers::Ask::Folder(crate::file_dialog::AsyncFileDialog::new().set_title(tl!("Choose a folder for the exported files"))),
+                            crate::pickers::Ask::Folder(
+                                crate::file_dialog::AsyncFileDialog::new().set_title(tl!("Choose a folder for the exported files")),
+                            ),
                             None,
                             convert,
                         );

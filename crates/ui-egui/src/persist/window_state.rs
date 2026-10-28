@@ -5,6 +5,7 @@
 //! with are put back, and a window that opens at that floor is given a usable size.
 
 /// eframe's storage key for the window settings.
+#[cfg(any(test, not(target_os = "haiku")))]
 const WINDOW_KEY: &str = "window";
 /// The size egui opens a stored size below (its floor for "ridiculously small" windows), in points.
 const EGUI_FLOOR: f32 = 64.0;
