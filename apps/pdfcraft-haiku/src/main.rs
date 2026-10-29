@@ -243,6 +243,9 @@ OPTIONS:
                     spool::Duplex::ShortEdge => print::Duplex::ShortEdge,
                 }),
                 grayscale: job.grayscale,
+                // libprint's PostScript and PCL drivers start in monochrome: a PDF prints in
+                // colour unless "Print in grayscale" or the printer's job setup says otherwise.
+                color: true,
                 // The print-ready PDF has its sheets in the orientation and order chosen, with
                 // only the pages chosen: each sheet prints as it is, a landscape one turned on
                 // portrait paper.

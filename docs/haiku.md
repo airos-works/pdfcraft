@@ -186,8 +186,9 @@ dialog's worker, and `printer_preferences` is what Properties… opens (on Windo
   orientation, resolution, colour, the driver's own options). Their answers are kept per printer
   in `~/config/settings/PdfCraft/printers/<printer>.settings` (not with `PDFCRAFT_NO_PREFS`).
   Preview has default settings; libprint's drivers have none, so the first job on such a printer
-  opens its Paper setup once. libprint's PostScript and PCL drivers default to monochrome: choose
-  Color in their job setup.
+  opens its Paper setup once. libprint's PostScript and PCL drivers start in monochrome: a job
+  asks for colour (unless "Print in grayscale"), until the printer's job setup has been
+  answered in Properties…, whose choice then stays (`craft:color_chosen` in the kept settings).
 - Where no default printer is set, the printer printed to becomes it (BPrintJob spools into the
   default printer's folder).
 
