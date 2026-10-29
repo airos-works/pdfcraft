@@ -28,6 +28,8 @@ path = "src/main.rs"
 pdfcraft-engine = { workspace = true }
 pdfcraft-platform = { workspace = true }
 pdfcraft-ui-egui = { workspace = true }
+# Printing (src/print.rs): the print-ready PDF's pages drawn for the print kit as the app draws them.
+pdfcraft-render = { workspace = true }
 egui = { workspace = true }
 # The native menu bar (src/menu.rs): craft-menu's menus in a BMenuBar.
 craft-menu = { workspace = true }

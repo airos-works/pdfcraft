@@ -131,7 +131,9 @@ pub(crate) fn body(
                     })
                     .response
                     .labelled_by(printer_caption.id);
-                    let tip = if spool::HAS_PRINTER_PREFERENCES {
+                    let tip = if d.host_preferences {
+                        tl!("Opens the printer driver's page and job settings. They are kept for this printer; the copies, two-sided and grayscale chosen here still apply.")
+                    } else if spool::HAS_PRINTER_PREFERENCES {
                         tl!("Opens the printer driver's preferences. They are saved for every print from this computer; the copies, two-sided, grayscale and paper chosen here still apply.")
                     } else {
                         tl!("The printer driver's own settings for this print: paper tray, paper type, finishing and more.")
@@ -140,7 +142,10 @@ pub(crate) fn body(
                     if properties.clicked()
                         && let Some(p) = d.printer.clone()
                     {
-                        if spool::HAS_PRINTER_PREFERENCES {
+                        if d.host_preferences {
+                            d.driver_error = None;
+                            d.preferences_for = Some(p);
+                        } else if spool::HAS_PRINTER_PREFERENCES {
                             d.driver_error = spool::open_printer_preferences(&p).err().map(|e| e.to_string());
                         } else {
                             if d.driver_options.as_ref().is_none_or(|(read_for, _)| *read_for != p) && d.driver_options_loading.as_deref() != Some(p.as_str()) {

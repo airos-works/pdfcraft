@@ -158,6 +158,37 @@ start-up check stays off. The community (Discord) links stay: they open the web 
 same app's community, and upstream has no switch for the host to hide them (Preferences' title
 bar button setting is the user's).
 
+## Printing
+
+File › Print lists the print server's printers (the folders in `~/config/settings/printers`, as
+the Printers preferences show them, the default one marked) and prints on the one chosen through
+the Be print kit, with WordCraft's print backend (`src/print.rs`, `native/print.cpp`, `pc_print_`
+prefix). Upstream prints through craft-print (CUPS, Windows), which has no Haiku spooler, so the
+UI crate has two host hooks, set by `install_printing` in `src/main.rs`:
+`PdfCraftApp::print_submitter` replaces craft-print's `submit_with_progress` on the Print
+dialog's worker, and `printer_preferences` is what Properties… opens (on Windows its
+`open_printer_preferences`, under CUPS the PPD's options).
+
+- What is printed is upstream's print-ready PDF: the pages, page range, odd/even and reverse,
+  sizing (Fit, Actual size, Poster, Multiple, Booklet, Label), orientation and Comments & Forms
+  are already in it, a sheet a page. The host passes copies, collation, two-sided and grayscale
+  to the driver (libprint's PostScript, PCL and Gutenprint read them).
+- Each sheet is drawn by PdfCraft's own renderer (`pdfcraft-render`, as the app draws pages, in
+  pieces of at most 4096 pixels a side) at the printer's resolution, at most 300 dpi, placed on
+  the driver's paper at its real size (centred, shrunk only when bigger: a Letter sheet on A4
+  paper), and a landscape sheet is turned a quarter onto portrait paper. Only the strips of rows
+  with ink are spooled, grey ones with one byte a pixel. A small window shows the sheets being
+  spooled and can cancel the job.
+- The paper comes from the driver's settings, not from the dialog's Paper (which lays out the
+  sheets): choose it in Properties…, which opens the driver's page setup and job setup (paper,
+  orientation, resolution, colour, the driver's own options). Their answers are kept per printer
+  in `~/config/settings/PdfCraft/printers/<printer>.settings` (not with `PDFCRAFT_NO_PREFS`).
+  Preview has default settings; libprint's drivers have none, so the first job on such a printer
+  opens its Paper setup once. libprint's PostScript and PCL drivers default to monochrome: choose
+  Color in their job setup.
+- Where no default printer is set, the printer printed to becomes it (BPrintJob spools into the
+  default printer's folder).
+
 ## File panels, clipboard and Key Store
 
 **File panels.** Each `add_filter` of a picker is a `BRefFilter` of its own (`MakeFilters` in
@@ -257,6 +288,14 @@ lose to the real pointer when that is over the window; place the pointer with th
 channel's `ui.move` instead. egui sends input methods nothing while the window isn't active:
 activate it (`hey <team> set Active of Window 0 to true`) right before an `ime` run.
 
+Printing is tested with a PostScript printer whose HP JetDirect transport goes to a local
+`nc -l -p PORT > job.ps` (give a test printer a port of its own: a job nobody listens for leaves
+print_addon_server showing an alert, which holds every later job), and the PostScript turned
+into pictures with Ghostscript elsewhere. The drivers' setup dialogs run in print_addon_server,
+whose application thread waits in them, so they can't be scripted with `hey`; a message posted
+straight to the dialog's window port (`listport`: "Paper setup", "Print job setup") answers them
+(libprint's page setup OK is 2, Cancel 1; its job setup OK is `'JSdl' + 3`).
+
 Host checks (2026-10-18):
 
 - `cargo test -j 2 -p pdfcraft-haiku -p pdfcraft-ui-egui --lib --tests`: 1,294 passed,
@@ -277,7 +316,6 @@ ports (upstream thread-local initializers). It does not disable other diagnostic
 ## Initial limitations
 
 - PDF pages are still rendered by the engine on the CPU; only the interface is drawn with Vulkan.
-- Direct native printing is not wired up yet; print-ready PDF export remains available.
 - Native accessibility nodes and persistent window geometry are not implemented.
 - Clipboard images currently use PNG, rather than archived native BBitmap data.
 - Optional OCR models and craft-fonts are not bundled. Upstream errors describe missing models.

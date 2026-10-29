@@ -4470,6 +4470,7 @@ dependencies = [
  "log",
  "pdfcraft-engine",
  "pdfcraft-platform",
+ "pdfcraft-render",
  "pdfcraft-ui-egui",
  "pollster 1.0.1",
  "rayon",

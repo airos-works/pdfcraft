@@ -83,6 +83,11 @@ pub struct PrintDraft {
     pub driver_options_loading: Option<String>,
     /// Properties… asked for this printer's options; the app starts the read on the next frame.
     pub read_options_for: Option<String>,
+    /// The host opens a printer driver's own settings (see [`crate::PrinterPreferences`]): Properties…
+    /// asks it to, rather than listing the spooler's options.
+    pub host_preferences: bool,
+    /// Properties… asked the host to open this printer's settings; the dialog does once it is drawn.
+    pub preferences_for: Option<String>,
 }
 
 impl Default for PrintDraft {
@@ -131,6 +136,8 @@ impl Default for PrintDraft {
             crop_pages: None,
             driver_options_loading: None,
             read_options_for: None,
+            host_preferences: false,
+            preferences_for: None,
         }
     }
 }

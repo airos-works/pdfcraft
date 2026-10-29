@@ -33,6 +33,17 @@ pub type PrinterSource = std::sync::Arc<dyn Fn() -> Vec<spool::Printer> + Send +
 /// UI language) unless a test stands in. Called off the GUI thread.
 pub type OptionsSource = std::sync::Arc<dyn Fn(&str) -> Vec<spool::PrinterOption> + Send + Sync>;
 
+/// Spools a job in place of craft-print's spooler, for a host whose system prints some other way
+/// (air/OS's print kit): the print-ready PDF, the job, and a callback told `(sent, sheets)` as
+/// sheets reach the spooler. Called off the GUI thread; answers the receipt to show, or the
+/// error.
+pub type PrintSubmitter = std::sync::Arc<dyn Fn(&[u8], &spool::Job, &mut dyn FnMut(usize, usize)) -> Result<String, String> + Send + Sync>;
+
+/// Opens a printer driver's own settings for Properties… (air/OS: the driver's page and job
+/// setup), where the spooler has no options to list. Called on the GUI thread, so it must not
+/// wait for the user; an error is shown under the printer.
+pub type PrinterPreferences = std::sync::Arc<dyn Fn(&str) -> Result<(), String> + Send + Sync>;
+
 /// The system spooler's printers, as the desktop app's [`PrinterSource`].
 pub fn system_printers() -> PrinterSource {
     std::sync::Arc::new(spool::printers)
@@ -158,6 +169,8 @@ impl PdfCraftApp {
             (true, other) => other,
         };
         self.print_draft = PrintDraft {
+            host_preferences: self.printer_preferences.is_some(),
+            preferences_for: None,
             crops: Vec::new(),
             crop_pages: None,
             printers,
@@ -435,6 +448,7 @@ impl PdfCraftApp {
     fn send_to_printer(&mut self, printer: String, bytes: Vec<u8>, job: spool::Job) -> bool {
         let (tx, rx) = std::sync::mpsc::channel();
         let ctx = self.ctx.clone();
+        let submitter = self.print_submitter.clone();
         std::thread::spawn(move || {
             let repaint = || {
                 if let Some(ctx) = &ctx {
@@ -442,11 +456,15 @@ impl PdfCraftApp {
                 }
             };
             // The receiver may be gone (the app quit): nothing to report to then.
-            let result = spool::submit_with_progress(&bytes, &job, &mut |sent, sheets| {
+            let mut progress = |sent, sheets| {
                 let _ = tx.send(JobNews::Sent(sent, sheets));
                 repaint();
-            });
-            let _ = tx.send(JobNews::Done(result.map_err(|e| e.to_string())));
+            };
+            let result = match submitter {
+                Some(submit) => submit(&bytes, &job, &mut progress),
+                None => spool::submit_with_progress(&bytes, &job, &mut progress).map_err(|e| e.to_string()),
+            };
+            let _ = tx.send(JobNews::Done(result));
             repaint();
         });
         self.print_tasks.jobs.push(PrintJob { printer, sheets: None, news: rx });

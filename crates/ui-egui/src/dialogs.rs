@@ -1310,6 +1310,11 @@ fn dialog_print(ui: &mut egui::Ui, app: &mut PdfCraftApp, req: &mut Pending) -> 
         view.need_thumbnail(p, true);
         view.page_preview(p)
     });
+    if let Some(printer) = app.print_draft.preferences_for.take()
+        && let Some(open) = app.printer_preferences.clone()
+    {
+        app.print_draft.driver_error = open(&printer).err();
+    }
     req.print_go = go;
     req.close = go || cancel;
     false

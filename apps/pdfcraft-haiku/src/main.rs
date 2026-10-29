@@ -16,6 +16,7 @@ mod clip;
 mod damage;
 mod keys;
 mod menu;
+mod print;
 mod raster;
 
 #[cfg(target_os = "haiku")]
@@ -54,7 +55,7 @@ mod haiku {
 
     use pdfcraft_ui_egui::PdfCraftApp;
 
-    use crate::{host, logging, menu, services, shell, write_control_file};
+    use crate::{host, logging, menu, print, services, shell, write_control_file};
 
     const USAGE: &str = "\
 PdfCraft — the PdfCraft PDF editor for air/OS
@@ -198,6 +199,7 @@ OPTIONS:
                 log::warn!("--{key}: {e}");
             }
         }
+        install_printing(&mut app);
         let picks = menu::Picks::default();
         if native_menu() {
             app.set_native_menu(craft_menu::NativeMenu::new(Box::new(menu::HaikuMenu::new(picks.clone()))));
@@ -212,6 +214,62 @@ OPTIONS:
         };
         shell.run();
         shell.finish();
+    }
+
+    /// File › Print through the print kit (`print.rs`): the print server's printers, jobs drawn
+    /// into a `BPrintJob` on the Print dialog's worker, and Properties… opening the printer
+    /// driver's page and job setup. Their answers are kept per printer in
+    /// `~/config/settings/PdfCraft/printers` (not with `PDFCRAFT_NO_PREFS`: then a driver without
+    /// defaults, such as PostScript's, asks for its paper at every job).
+    fn install_printing(app: &mut PdfCraftApp) {
+        use pdfcraft_engine::print::spool;
+        let store = print::Store::new(config_dir().filter(|_| prefs_enabled()).map(|d| d.join("printers")));
+        app.printer_source = Some(std::sync::Arc::new(|| {
+            print::printers()
+                .into_iter()
+                .map(|p| spool::Printer { name: p.name, description: String::new(), default: p.default, two_sided: None })
+                .collect()
+        }));
+        let jobs = store.clone();
+        app.print_submitter = Some(std::sync::Arc::new(move |pdf: &[u8], job: &spool::Job, _sent: &mut dyn FnMut(usize, usize)| {
+            let Some(printer) = job.printer.as_deref() else { return Err("no printer was chosen".to_owned()) };
+            let options = print::Options {
+                title: job.title.clone(),
+                copies: job.copies,
+                collate: job.collate,
+                duplex: job.duplex.map(|d| match d {
+                    spool::Duplex::Off => print::Duplex::Off,
+                    spool::Duplex::LongEdge => print::Duplex::LongEdge,
+                    spool::Duplex::ShortEdge => print::Duplex::ShortEdge,
+                }),
+                grayscale: job.grayscale,
+                // The print-ready PDF has its sheets in the orientation and order chosen, with
+                // only the pages chosen: each sheet prints as it is, a landscape one turned on
+                // portrait paper.
+                landscape: None,
+                setup: false,
+                pages: None,
+            };
+            let started = std::time::Instant::now();
+            let result = print::print_pdf(Some(printer), pdf.to_vec(), &options, &jobs).map_err(|e| e.to_string());
+            match &result {
+                Ok(receipt) => log::info!("printed on {printer} in {:.1} s: {receipt}", started.elapsed().as_secs_f32()),
+                Err(e) => log::warn!("printing on {printer}: {e}"),
+            }
+            result
+        }));
+        app.printer_preferences = Some(std::sync::Arc::new(move |printer: &str| {
+            let (printer, store) = (printer.to_owned(), store.clone());
+            // The dialogs wait for the user: not on the interface thread.
+            std::thread::Builder::new()
+                .name("printer setup".into())
+                .spawn(move || match print::setup(&printer, &store) {
+                    Ok(()) | Err(print::Error::Cancelled) => {}
+                    Err(e) => log::warn!("setting up {printer}: {e}"),
+                })
+                .map(|_| ())
+                .map_err(|e| e.to_string())
+        }));
     }
 
     pub fn main() {

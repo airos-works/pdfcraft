@@ -913,3 +913,55 @@ fn a_booklet_decides_two_sided_itself() {
     assert!(h.query_by_role_and_label(Role::ComboBox, "Two-sided:").is_some());
     assert_eq!(h.state().print_draft.job("x").duplex, Some(Duplex::LongEdge), "back to the choice");
 }
+
+/// A host that prints some other way (air/OS's print kit) gets the job instead of craft-print's
+/// spooler, and Properties… asks it to open the printer driver's own settings.
+#[test]
+fn a_host_print_system_takes_the_job_and_the_properties() {
+    use pdfcraft_engine::print::spool::{Job, Printer};
+    use std::sync::{Arc, Mutex};
+    let mut h = harness();
+    h.state_mut().printer_source =
+        Some(Arc::new(|| vec![Printer { name: "Desk".into(), default: true, two_sided: None, description: String::new() }]));
+    let jobs: Arc<Mutex<Vec<(usize, Job)>>> = Arc::default();
+    let taken = jobs.clone();
+    h.state_mut().print_submitter = Some(Arc::new(move |pdf: &[u8], job: &Job, sent: &mut dyn FnMut(usize, usize)| {
+        sent(1, 1);
+        taken.lock().unwrap().push((pdf.len(), job.clone()));
+        Ok("spooled 2 sheet(s)".into())
+    }));
+    let opened: Arc<Mutex<Vec<String>>> = Arc::default();
+    let asked = opened.clone();
+    h.state_mut().printer_preferences = Some(Arc::new(move |printer: &str| {
+        asked.lock().unwrap().push(printer.to_owned());
+        Ok(())
+    }));
+    assert!(h.state_mut().execute("print.dialog"));
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+    while h.state().print_draft.printers_loading && std::time::Instant::now() < deadline {
+        h.run_steps(1);
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
+    h.run_steps(2);
+    assert_eq!(h.state().print_draft.printer.as_deref(), Some("Desk"));
+    assert!(h.state().print_draft.host_preferences);
+    h.get_by_label("Properties…").click();
+    h.run_steps(2);
+    assert_eq!(*opened.lock().unwrap(), vec!["Desk".to_owned()], "the host opens the driver's settings");
+    assert!(!h.state().print_draft.show_driver_options, "no spooler options are listed");
+    h.state_mut().print_draft.copies = 2;
+    h.get_by_role_and_label(Role::Button, "Print").click();
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+    while jobs.lock().unwrap().is_empty() && std::time::Instant::now() < deadline {
+        h.run_steps(1);
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
+    h.run_steps(3);
+    let jobs = jobs.lock().unwrap();
+    assert_eq!(jobs.len(), 1);
+    let (bytes, job) = &jobs[0];
+    assert!(*bytes > 0, "the print-ready PDF");
+    assert_eq!((job.printer.as_deref(), job.copies), (Some("Desk"), 2));
+    let toast = h.state().toast.as_ref().map(|(m, _)| m.clone()).unwrap_or_default();
+    assert_eq!(toast, "Sent to Desk: spooled 2 sheet(s)");
+}
