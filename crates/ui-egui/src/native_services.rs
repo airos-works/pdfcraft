@@ -15,7 +15,7 @@ pub fn install(services: Services) -> Result<(), &'static str> {
 }
 
 pub mod file_dialog {
-    use super::*;
+    use super::{PathBuf, SERVICES};
     #[derive(Default, Clone)]
     pub struct AsyncFileDialog {
         pub title: String,
@@ -72,7 +72,7 @@ pub mod file_dialog {
 }
 
 pub mod clipboard {
-    use super::*;
+    use super::{PathBuf, SERVICES, Services};
     pub struct ImageData<'a> {
         pub width: usize,
         pub height: usize,
