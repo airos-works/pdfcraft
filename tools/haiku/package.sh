@@ -29,8 +29,9 @@ while IFS= read -r license; do
     mkdir -p "$DOCS/licenses/$(dirname -- "$license")"
     cp "$license" "$DOCS/licenses/$license"
 done < <(awk -F '"' '/^licence_file = / { print $2 }' ATTRIBUTION.toml | sort -u)
-mkdir -p "$DOCS/licenses/epaint_default_fonts" "$DOCS/licenses/hayro-cmap"
-cp "$CARGO_HOME"/registry/src/*/epaint_default_fonts-0.36.2/fonts/*.txt "$DOCS/licenses/epaint_default_fonts/"
-cp "$CARGO_HOME"/registry/src/*/hayro-cmap-0.1.0/assets/LICENSE.txt "$DOCS/licenses/hayro-cmap/"
+# egui's default fonts come from the storytold/egui commit patched in Cargo.toml (a git checkout).
+mkdir -p "$DOCS/licenses/epaint_default_fonts"
+EGUI_REV=$(sed -n 's/^epaint_default_fonts = .*rev = "\([0-9a-f]*\)".*/\1/p' Cargo.toml)
+cp "$CARGO_HOME"/git/checkouts/egui-*/"${EGUI_REV:0:7}"/crates/epaint_default_fonts/fonts/*.txt "$DOCS/licenses/epaint_default_fonts/"
 ln -s ../../../../apps/PdfCraft "$STAGE/data/deskbar/menu/Applications/PdfCraft"
 "$TOOLS/package/package" create -C "$STAGE" "$OUT/pdfcraft-$VERSION-x86_64.hpkg"
