@@ -95,6 +95,21 @@ if rounding makes that disagree with the frame size it falls back to app_server.
 (craft-quit's Quit) is now a close request for the next frame, as in egui-winit, so the
 unsaved-changes prompt runs; it used to quit at once.
 
+## Scrolling
+
+A mouse wheel scrolls in whole steps, as before (lines from a wheel, which the page view
+accelerates when spun fast and single-page view turns a page per notch). An air/OS touchpad's
+scroll gesture (`B_MOUSE_WHEEL_CHANGED` with `be:device_subtype` 2, `be:wheel_precise_delta_*`
+and `be:wheel_phase`, air/OS since 2026-10-27) reaches the interface as a trackpad's: its
+unrounded steps become points, a step as far as a wheel notch scrolls (egui's line: 100 points
+at Preferences' Normal scroll speed; the Touchpad preferences set how far the fingers move for a
+step), with the gesture's start and end, so the page follows the fingers without the wheel's
+acceleration, single-page view turns one page per swipe (a light touch doesn't), and egui's
+lists treat it as a trackpad. The end of a gesture that arrives with its last movement is
+held for the next frame (egui drops the deltas of a gesture that ended). air/OS's touchpad has
+no pinch gesture: Command with the wheel or a two-finger scroll zooms (egui's zoom modifier), as
+do the zoom buttons.
+
 ## Updates and community links
 
 air/OS installs and updates PdfCraft as a package (pkgman, SoftwareUpdater): Help has no Check
