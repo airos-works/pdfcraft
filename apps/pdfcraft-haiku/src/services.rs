@@ -91,6 +91,7 @@ pub fn install() -> Result<(), &'static str> {
             add: |s| host::keystore_add(&s.identifier, &s.name, &s.data),
             remove: host::keystore_remove,
         },
+        reveal: |path| if host::reveal(path) { Ok(()) } else { Err(format!("Couldn't show {} in Tracker", path.display())) },
     })
 }
 

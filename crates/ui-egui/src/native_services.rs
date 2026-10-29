@@ -10,10 +10,17 @@ pub struct Services {
     pub set_files: fn(&[PathBuf]) -> Result<(), String>,
     /// The system's key store (air/OS: the Key Store), for digital IDs.
     pub key_store: key_store::KeyStore,
+    /// Shows a file selected in its folder in the file manager (air/OS: Tracker).
+    pub reveal: fn(&std::path::Path) -> Result<(), String>,
 }
 static SERVICES: OnceLock<Services> = OnceLock::new();
 pub fn install(services: Services) -> Result<(), &'static str> {
     SERVICES.set(services).map_err(|_| "native services already installed")
+}
+
+/// The tab menu's Reveal: the file selected in its folder's file manager window.
+pub fn reveal(path: &std::path::Path) -> Result<(), String> {
+    (SERVICES.get().ok_or("the file manager is unavailable")?.reveal)(path)
 }
 
 pub mod file_dialog {

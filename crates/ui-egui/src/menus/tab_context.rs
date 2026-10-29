@@ -47,7 +47,18 @@ impl crate::PdfCraftApp {
     }
 }
 
-#[cfg(not(target_arch = "wasm32"))]
+/// air/OS: the host hands Tracker the folder with the file selected in it, as the other systems'
+/// file managers show it (`open <folder>`, the first port's, only opened the folder).
+#[cfg(target_os = "haiku")]
+fn reveal(path: &std::path::Path) -> Result<(), String> {
+    let path = std::path::absolute(path).map_err(|e| e.to_string())?;
+    if !path.try_exists().map_err(|e| e.to_string())? {
+        return Err("The file no longer exists".into());
+    }
+    crate::native_services::reveal(&path)
+}
+
+#[cfg(not(any(target_arch = "wasm32", target_os = "haiku")))]
 fn reveal(path: &std::path::Path) -> Result<(), String> {
     // Absolute paths also prevent a filename starting with '-' becoming an option.
     let path = std::path::absolute(path).map_err(|e| e.to_string())?;
@@ -73,7 +84,7 @@ fn reveal(path: &std::path::Path) -> Result<(), String> {
 /// The process that runs `program` with `args`. Windows: `reveal_command` already quotes what
 /// Explorer needs quoted, and Rust's own quoting of an argument with a space breaks `/select,`
 /// (#2579), so the arguments go on the command line as written.
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(not(any(target_arch = "wasm32", target_os = "haiku")))]
 fn reveal_process(program: &str, args: &[std::ffi::OsString]) -> std::process::Command {
     let mut command = std::process::Command::new(program);
     #[cfg(windows)]
@@ -88,7 +99,7 @@ fn reveal_process(program: &str, args: &[std::ffi::OsString]) -> std::process::C
     command
 }
 
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(not(any(target_arch = "wasm32", target_os = "haiku")))]
 fn reveal_via(
     platform: &str,
     path: &std::path::Path,
@@ -108,10 +119,9 @@ fn reveal_via(
     Err("Could not reveal the file in the system file manager".into())
 }
 
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(not(any(target_arch = "wasm32", target_os = "haiku")))]
 fn reveal_command(platform: &str, path: &std::path::Path) -> Result<(&'static str, Vec<std::ffi::OsString>), String> {
     match platform {
-        "haiku" => Ok(("open", vec![path.parent().ok_or("The file has no parent directory")?.as_os_str().into()])),
         "windows" => {
             // Explorer reads `/select,"<object>"`: the path quoted after the comma (#2579). Quoting
             // the whole argument instead ("/select,C:\a b.pdf", what an ordinary argument with a

@@ -106,6 +106,7 @@ unsafe extern "C" {
     fn pc_clipboard_set_picture(mime: *const c_char, data: *const c_void, len: usize) -> i32;
     fn pc_host_file_panel(id: i32, save: i32, name: *const c_char, directory: *const c_char, filters: *const c_char, title: *const c_char) -> i32;
     fn pc_host_open_url(url: *const c_char) -> i32;
+    fn pc_host_reveal(path: *const c_char) -> i32;
     fn pc_host_ime_caret(known: i32, left: f32, top: f32, right: f32, bottom: f32);
     fn pc_host_ime_stop();
     fn pc_host_alert(title: *const c_char, text: *const c_char);
@@ -519,6 +520,14 @@ pub fn ime_caret(rect: Option<[f32; 4]>) {
 pub fn ime_stop() {
     // SAFETY: no arguments.
     unsafe { pc_host_ime_stop() }
+}
+
+/// Shows `path` in Tracker: a folder opens, a file is selected in its folder.
+pub fn reveal(path: &std::path::Path) -> bool {
+    use std::os::unix::ffi::OsStrExt;
+    let Ok(p) = CString::new(path.as_os_str().as_bytes()) else { return false };
+    // SAFETY: a valid C string.
+    unsafe { pc_host_reveal(p.as_ptr()) == 0 }
 }
 
 /// Opens a URL with its preferred application.

@@ -208,6 +208,11 @@ their paths in `text/plain`. Where the interface pastes text, a clipboard withou
 gives the files on it (copied in Tracker) as their paths, else its `text/uri-list` (files as
 paths, links as links), as a file manager's copy pastes on Linux (`src/clip.rs`).
 
+**Reveal.** A tab's Reveal in File Explorer shows the PDF selected in its folder's Tracker window
+(`pc_host_reveal`, Tracker's `nodeRefToSelect`, through `native_services::reveal`), as the other
+systems' file managers show it. The first port (HAIKU1) ran `open <folder>`, which opened the
+folder without the file selected (and only with `open` on the `PATH`).
+
 **Key Store.** `os_key_store_ids` is on: digital IDs can be kept in air/OS's Key Store, as the
 Keychain and the Windows certificate store keep them (`crates/ui-egui/src/tools/sign_ui/key_store.rs`).
 Configure New Digital ID has "Keep it in the Key Store" for both a new ID and one from a file;
