@@ -56,7 +56,9 @@ file, the preferences or the recovery folder (`BApplication` reports `B_ALREADY_
 documents open as tabs, as the desktop app opens what another launch or Finder hands it
 (`OsEvent::Open` → `open_path`): a document already open comes to the front instead, and the
 window comes forward, un-minimized. A launch without documents (the Deskbar, `B_SILENT_RELAUNCH`)
-only brings the window forward. Quitting (Command+Q, the Deskbar's Quit, File › Quit) asks about
+only brings the window forward. The copy's own arguments, which `BApplication` posts to itself
+before `B_READY_TO_RUN` without a reply address (so `IsSourceRemote()` calls them remote), are
+left to the Rust side, which opened them already. Quitting (Command+Q, the Deskbar's Quit, File › Quit) asks about
 every open document with unsaved changes in turn, as upstream's close guard does for the
 desktop app's window, then quits. A test copy that must run beside the installed one runs from a
 file of its own (and so does `--control`: a second launch of the same file with it only hands

@@ -1201,8 +1201,14 @@ class PcApp : public BApplication {
 public:
 	PcApp(const char* signature, status_t* error)
 		:
-		BApplication(signature, error)
+		BApplication(signature, error),
+		fReady(false)
 	{
+	}
+
+	virtual void ReadyToRun()
+	{
+		fReady = true;
 	}
 
 	virtual void RefsReceived(BMessage* message)
@@ -1226,8 +1232,11 @@ public:
 		// over as this copy is already running (B_SINGLE_LAUNCH), opens its
 		// documents here: the arguments that aren't options (nor an option's
 		// value), relative to the folder it was started in.
+		// BApplication posts this copy's own arguments to itself before
+		// B_READY_TO_RUN, without a reply address, so IsSourceRemote()
+		// can't tell them from another launch's.
 		BMessage* message = CurrentMessage();
-		if (message == NULL || !message->IsSourceRemote())
+		if (!fReady || message == NULL || !message->IsSourceRemote())
 			return;
 		const char* cwd = NULL;
 		message->FindString("cwd", &cwd);
@@ -1312,6 +1321,10 @@ public:
 				BApplication::MessageReceived(message);
 		}
 	}
+
+private:
+	// B_READY_TO_RUN has come: B_ARGV_RECEIVED is another launch's.
+	bool fReady;
 };
 
 
