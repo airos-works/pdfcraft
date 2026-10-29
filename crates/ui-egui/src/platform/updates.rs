@@ -1,8 +1,13 @@
 //! Help ▸ Check for updates and the check at start, through `craft_update`: the flow itself is its
 //! `Updater`; this module supplies the suite, the quit path and the status dialog.
+//!
+//! air/OS installs and updates PdfCraft as a package (pkgman, SoftwareUpdater), so there Check
+//! for updates only says so: upstream's release downloads aren't offered.
 
+#[cfg(not(any(target_arch = "wasm32", target_os = "haiku")))]
+use craft_update::updater::{Action, Status};
 #[cfg(not(target_arch = "wasm32"))]
-use craft_update::updater::{Action, CheckSource, Status, Updater};
+use craft_update::updater::{CheckSource, Updater};
 use egui::{Align, Layout};
 
 use crate::{PdfCraftApp, theme, widgets};
@@ -55,10 +60,14 @@ impl PdfCraftApp {
 
     /// Help ▸ Check for updates: ask for the latest release and show the outcome.
     pub fn check_for_updates(&mut self) {
-        #[cfg(not(target_arch = "wasm32"))]
+        #[cfg(not(any(target_arch = "wasm32", target_os = "haiku")))]
         {
             self.updates.open = true;
             self.updates.check_requested = true;
+        }
+        #[cfg(target_os = "haiku")]
+        {
+            self.updates.open = true;
         }
         #[cfg(target_arch = "wasm32")]
         {
@@ -84,7 +93,7 @@ impl PdfCraftApp {
 
 /// The startup prompt, and the Updates dialog that answers Help ▸ Check for updates.
 pub(crate) fn dialog(app: &mut PdfCraftApp, ctx: &egui::Context) {
-    #[cfg(not(target_arch = "wasm32"))]
+    #[cfg(not(any(target_arch = "wasm32", target_os = "haiku")))]
     {
         // The restart helper is scheduled before the app closes, so no update starts over unsaved work.
         let clean = app.first_dirty().is_none();
@@ -113,7 +122,7 @@ pub(crate) fn dialog(app: &mut PdfCraftApp, ctx: &egui::Context) {
             ui.label(egui::RichText::new(tl!("Check for updates")).font(theme::semibold(16.0)));
         });
         ui.add_space(8.0);
-        #[cfg(not(target_arch = "wasm32"))]
+        #[cfg(not(any(target_arch = "wasm32", target_os = "haiku")))]
         match app.updates.updater.status() {
             Status::Idle => {
                 ui.horizontal(|ui| {
@@ -140,6 +149,14 @@ pub(crate) fn dialog(app: &mut PdfCraftApp, ctx: &egui::Context) {
                     .color(t.text_muted),
                 );
             }
+        }
+        #[cfg(target_os = "haiku")]
+        {
+            ui.label(crate::i18n::fmt(tl!("You have PdfCraft {c}."), &[("c", current)]));
+            ui.label(
+                egui::RichText::new(tl!("PdfCraft is updated with the system's packages: SoftwareUpdater installs newer versions."))
+                    .color(t.text_muted),
+            );
         }
         #[cfg(target_arch = "wasm32")]
         let _ = (&t, current);

@@ -95,6 +95,16 @@ if rounding makes that disagree with the frame size it falls back to app_server.
 (craft-quit's Quit) is now a close request for the next frame, as in egui-winit, so the
 unsaved-changes prompt runs; it used to quit at once.
 
+## Updates and community links
+
+air/OS installs and updates PdfCraft as a package (pkgman, SoftwareUpdater): Help has no Check
+for updates item (the native and the in-window menus, `HELP` in `menus.rs`), and the command
+(from the command palette or the control channel) shows the version and says SoftwareUpdater
+installs newer versions instead of asking upstream's releases (`platform/updates.rs`). The
+start-up check stays off. The community (Discord) links stay: they open the web browser on the
+same app's community, and upstream has no switch for the host to hide them (Preferences' title
+bar button setting is the user's).
+
 ## File panels, clipboard and Key Store
 
 **File panels.** Each `add_filter` of a picker is a `BRefFilter` of its own (`MakeFilters` in
