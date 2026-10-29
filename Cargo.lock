@@ -4460,16 +4460,20 @@ version = "0.15.0"
 name = "pdfcraft-haiku"
 version = "0.15.0"
 dependencies = [
+ "ash",
  "cc",
  "chrono",
  "egui",
+ "egui-wgpu",
  "image",
  "log",
  "pdfcraft-engine",
  "pdfcraft-platform",
  "pdfcraft-ui-egui",
+ "pollster 1.0.1",
  "rayon",
  "serde_json",
+ "wgpu",
 ]
 
 [[package]]
@@ -7698,8 +7702,6 @@ checksum = "d4ca08e5ef825b65b056d9efbd95c8750683f0a6d0466d02e96dc2e4e360f3d2"
 [[package]]
 name = "wgpu"
 version = "30.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "527ccdf43dd5b2e8676eed9984ce00e2bbb0a1b85b70c1969dcb6cd2eb55ab9e"
 dependencies = [
  "arrayvec",
  "bitflags 2.13.2",
@@ -7728,8 +7730,6 @@ dependencies = [
 [[package]]
 name = "wgpu-core"
 version = "30.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "14c018fce9b6270aa203c2fdd56f3cce996713534bd757e4ea58c8560b121f14"
 dependencies = [
  "arrayvec",
  "bit-set 0.10.0",
@@ -7790,8 +7790,6 @@ dependencies = [
 [[package]]
 name = "wgpu-core-deps-windows-linux-android"
 version = "30.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7586165fd5f6d881cb9ce4bb71f40d6caab2c0f1837e3fc1d9788a197fb6004f"
 dependencies = [
  "wgpu-hal",
 ]

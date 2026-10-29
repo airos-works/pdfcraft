@@ -1,5 +1,5 @@
 name pdfcraft
-version 0.15.0~airos1-1
+version 0.15.0~airos1-2
 architecture x86_64
 summary "PDF reader and editor"
 description "PdfCraft for air/OS: read, annotate, edit, organize and save PDFs using the upstream Rust engine, with native Be API windows, file panels and clipboard. Includes the command-line tools."
