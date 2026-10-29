@@ -8,6 +8,8 @@ pub struct Services {
     pub clipboard_image: fn() -> Result<clipboard::ImageData<'static>, String>,
     pub set_image: fn(clipboard::ImageData<'_>) -> Result<(), String>,
     pub set_files: fn(&[PathBuf]) -> Result<(), String>,
+    /// The system's key store (air/OS: the Key Store), for digital IDs.
+    pub key_store: key_store::KeyStore,
 }
 static SERVICES: OnceLock<Services> = OnceLock::new();
 pub fn install(services: Services) -> Result<(), &'static str> {
@@ -20,7 +22,8 @@ pub mod file_dialog {
     pub struct AsyncFileDialog {
         pub title: String,
         pub name: String,
-        pub extensions: Vec<String>,
+        /// The filters, in order (the first shows): each one's label and extensions.
+        pub filters: Vec<(String, Vec<String>)>,
         /// The folder the panel opens in; empty for the panel's own choice.
         pub directory: String,
         /// 0: file, 1: save, 2: directory, 3: multiple files.
@@ -48,8 +51,8 @@ pub mod file_dialog {
             self.directory = dir.as_ref().to_string_lossy().into_owned();
             self
         }
-        pub fn add_filter(mut self, _label: impl Into<String>, extensions: &[impl ToString]) -> Self {
-            self.extensions.extend(extensions.iter().map(ToString::to_string));
+        pub fn add_filter(mut self, label: impl Into<String>, extensions: &[impl ToString]) -> Self {
+            self.filters.push((label.into(), extensions.iter().map(ToString::to_string).collect()));
             self
         }
         fn pick(mut self, mode: i32) -> Vec<FileHandle> {
@@ -102,5 +105,40 @@ pub mod clipboard {
     }
     fn services() -> Result<&'static Services, String> {
         SERVICES.get().ok_or_else(|| "native clipboard unavailable".into())
+    }
+}
+
+/// Secrets in the system's key store: what the host keeps there for the app, each under a
+/// unique identifier, with a name people see and its data.
+pub mod key_store {
+    use super::SERVICES;
+
+    pub struct Stored {
+        pub identifier: String,
+        pub name: String,
+        pub data: Vec<u8>,
+    }
+
+    pub struct KeyStore {
+        pub list: fn() -> Result<Vec<Stored>, String>,
+        /// Adds a secret, replacing one with the same identifier.
+        pub add: fn(&Stored) -> Result<(), String>,
+        pub remove: fn(&str) -> Result<(), String>,
+    }
+
+    fn store() -> Result<&'static KeyStore, String> {
+        SERVICES.get().map(|s| &s.key_store).ok_or_else(|| "the key store is unavailable".into())
+    }
+
+    pub fn list() -> Result<Vec<Stored>, String> {
+        (store()?.list)()
+    }
+
+    pub fn add(secret: &Stored) -> Result<(), String> {
+        (store()?.add)(secret)
+    }
+
+    pub fn remove(identifier: &str) -> Result<(), String> {
+        (store()?.remove)(identifier)
     }
 }

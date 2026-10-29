@@ -17,6 +17,7 @@
 #include <Application.h>
 #include <Bitmap.h>
 #include <Clipboard.h>
+#include <ControlLook.h>
 #include <Cursor.h>
 #include <DirectWindow.h>
 #include <Directory.h>
@@ -26,15 +27,19 @@
 #include <Font.h>
 #include <FormattingConventions.h>
 #include <InterfaceDefs.h>
+#include <Key.h>
+#include <KeyStore.h>
 #include <Locale.h>
 #include <LocaleRoster.h>
 #include <MenuBar.h>
+#include <MenuField.h>
 #include <MenuItem.h>
 #include <Message.h>
 #include <Messenger.h>
 #include <Mime.h>
 #include <Node.h>
 #include <Path.h>
+#include <PopUpMenu.h>
 #include <Region.h>
 #include <Roster.h>
 #include <Screen.h>
@@ -120,6 +125,10 @@ static const uint32 kMenuChosen = 'pcMN';
 static const char* kMenuCommandField = "pc:command";
 // A menu update that waited for the menus to close.
 static const uint32 kMenuApply = 'pcMA';
+// A file panel's file type menu: show the files of filter "pc:filter".
+static const uint32 kFilterChosen = 'pcFL';
+static const char* kFilterField = "pc:filter";
+static const char* kFilterMenuName = "pc:filters";
 
 
 // #pragma mark - Event queue
@@ -916,20 +925,16 @@ MonitorFrame(BWindow* window)
 // #pragma mark - File panels
 
 
-// Shows the files an Open panel offers: folders, and files with one of the
-// extensions (all files when there are none).
+// Shows the files a file panel offers: folders, and files with one of the
+// extensions (all files when there are none, or one is "*").
 class ExtensionFilter : public BRefFilter {
 public:
-	ExtensionFilter(const char* extensions)
+	ExtensionFilter(const std::vector<std::string>& extensions)
+		:
+		fAll(false)
 	{
-		BString list(extensions != NULL ? extensions : "");
-		int32 start = 0;
-		while (start <= list.Length()) {
-			int32 end = list.FindFirst('\n', start);
-			if (end < 0)
-				end = list.Length();
-			BString extension;
-			list.CopyInto(extension, start, end - start);
+		for (size_t i = 0; i < extensions.size(); i++) {
+			BString extension(extensions[i].c_str());
 			extension.ToLower();
 			if (extension == "*") {
 				fExtensions.clear();
@@ -938,7 +943,6 @@ public:
 			}
 			if (extension.Length() > 0)
 				fExtensions.push_back(extension);
-			start = end + 1;
 		}
 		fAll = fExtensions.empty();
 	}
@@ -968,9 +972,46 @@ private:
 };
 
 
+// A panel's filters, the dialog's in its order: each one's label and the
+// files it shows. Panels don't own their ref filters; these do.
+struct PanelFilters {
+	std::vector<std::string> labels;
+	std::vector<ExtensionFilter*> filters;
+
+	void Clear()
+	{
+		for (size_t i = 0; i < filters.size(); i++)
+			delete filters[i];
+		labels.clear();
+		filters.clear();
+	}
+};
+
+
+// The filters of a description from src/host.rs: one per line, its label then
+// its extensions, separated by the unit separator. None: one showing every file,
+// without a label.
+static PanelFilters
+MakeFilters(const char* spec)
+{
+	PanelFilters made;
+	std::string text(spec != NULL ? spec : "");
+	std::vector<std::vector<std::string> > lines = ParseMenuSpec(text);
+	for (size_t i = 0; i < lines.size(); i++) {
+		std::vector<std::string> extensions(lines[i].begin() + 1, lines[i].end());
+		made.labels.push_back(lines[i][0]);
+		made.filters.push_back(new ExtensionFilter(extensions));
+	}
+	if (made.filters.empty())
+		made.filters.push_back(new ExtensionFilter(std::vector<std::string>()));
+	return made;
+}
+
+
 static BFilePanel* sOpenPanel = NULL;
-static ExtensionFilter* sOpenFilter = NULL;
+static PanelFilters sOpenFilters;
 static BFilePanel* sSavePanel = NULL;
+static PanelFilters sSaveFilters;
 static int32 sDialogId = -1;
 static bool sDialogAnswered = true;
 
@@ -990,6 +1031,9 @@ AnswerDialog(int32 id, bool picked, const std::string& path)
 
 
 // #pragma mark - Application
+
+
+static void ChooseFilter(const BMessage* message);
 
 
 class PcApp : public BApplication {
@@ -1053,6 +1097,9 @@ public:
 				// Sent whenever a panel closes, after its answer if it had
 				// one.
 				AnswerDialog(sDialogId, false, std::string());
+				break;
+			case kFilterChosen:
+				ChooseFilter(message);
 				break;
 			default:
 				BApplication::MessageReceived(message);
@@ -1589,12 +1636,100 @@ PositionPanel(BFilePanel* panel)
     window->Unlock();
 }
 
-// Shows a file panel: Open (save == 0) offering the extensions (one per line;
-// "*": any file), or Save suggesting the name. Its answer arrives as a
-// PC_DIALOG_ANSWER event with the id.
+}
+
+
+// Gives a panel its filters (MakeFilters), the first one showing, with a menu
+// to switch between them beside its folder menu when they have labels: Haiku's
+// file panel has none of its own. `owned` keeps them; the ones it had go once
+// the panel no longer uses them.
+static void
+SetPanelFilters(BFilePanel* panel, PanelFilters& owned, PanelFilters filters,
+	bool save)
+{
+	panel->SetRefFilter(filters.filters[0]);
+	owned.Clear();
+	owned = filters;
+	BWindow* window = panel->Window();
+	if (!window->Lock())
+		return;
+	float spacing = be_control_look->ComposeSpacing(B_USE_SMALL_SPACING);
+	BView* background = window->ChildAt(0);
+	BView* folders = window->FindView("DirMenuField");
+	BMenuField* folderField = dynamic_cast<BMenuField*>(folders);
+	BView* old = window->FindView(kFilterMenuName);
+	if (old != NULL) {
+		old->RemoveSelf();
+		delete old;
+		// The folder menu's own width again (TFilePanel's).
+		if (folderField != NULL) {
+			folderField->ResizeTo(spacing * 50, folderField->Bounds().Height());
+			folderField->MenuBar()->SetMaxContentWidth(spacing * 50 - 26);
+		}
+	}
+	if (background != NULL && folders != NULL && !owned.labels.empty()) {
+		// At the right of the folder menu's row: as wide as the longest
+		// label and the menu's arrow, up to half the row; the folder menu
+		// gives up the room.
+		float widest = 0;
+		for (size_t i = 0; i < owned.labels.size(); i++) {
+			widest = std::max(widest,
+				be_plain_font->StringWidth(owned.labels[i].c_str()));
+		}
+		BRect frame = folders->Frame();
+		float rowLeft = frame.left;
+		frame.right = background->Bounds().right - spacing;
+		float width = std::min(widest + 3 * frame.Height(),
+			(frame.right - rowLeft - spacing) / 2);
+		frame.left = frame.right - width;
+		float foldersWidth = frame.left - spacing - rowLeft;
+		folders->ResizeTo(foldersWidth, folders->Bounds().Height());
+		if (folderField != NULL)
+			folderField->MenuBar()->SetMaxContentWidth(foldersWidth - 26);
+		BPopUpMenu* menu = new BPopUpMenu("filters");
+		for (size_t i = 0; i < owned.labels.size(); i++) {
+			BMessage* message = new BMessage(kFilterChosen);
+			message->AddInt32(kFilterField, (int32)i);
+			message->AddBool("pc:save", save);
+			BMenuItem* item = new BMenuItem(owned.labels[i].c_str(), message);
+			item->SetTarget(be_app);
+			item->SetMarked(i == 0);
+			menu->AddItem(item);
+		}
+		BMenuField* field = new BMenuField(frame, kFilterMenuName, NULL, menu,
+			B_FOLLOW_RIGHT | B_FOLLOW_TOP);
+		field->SetDivider(0);
+		field->MenuBar()->SetMaxContentWidth(width - 26);
+		background->AddChild(field);
+	}
+	window->Unlock();
+}
+
+
+// A filter chosen in a panel's file type menu.
+static void
+ChooseFilter(const BMessage* message)
+{
+	int32 index;
+	if (message->FindInt32(kFilterField, &index) != B_OK || index < 0)
+		return;
+	bool save = message->GetBool("pc:save", false);
+	BFilePanel* panel = save ? sSavePanel : sOpenPanel;
+	PanelFilters& filters = save ? sSaveFilters : sOpenFilters;
+	if (panel != NULL && (size_t)index < filters.filters.size())
+		panel->SetRefFilter(filters.filters[index]);
+}
+
+
+extern "C" {
+
+
+// Shows a file panel: Open (save == 0, 2 for a folder, 3 for several files) or
+// Save suggesting the name, with the filters (MakeFilters) to choose from, the
+// first one showing. Its answer arrives as a PC_DIALOG_ANSWER event with the id.
 int32_t
 pc_host_file_panel(int32_t id, int32_t save, const char* name,
-	const char* directory, const char* extensions, const char* title)
+	const char* directory, const char* filters, const char* title)
 {
 	bool inDirectory = directory != NULL && directory[0] != '\0';
 	BMessenger target(be_app);
@@ -1607,6 +1742,7 @@ pc_host_file_panel(int32_t id, int32_t save, const char* name,
 		message.AddInt32(kDialogField, id);
 		sSavePanel->SetMessage(&message);
 		sSavePanel->SetSaveText(name != NULL ? name : "");
+		SetPanelFilters(sSavePanel, sSaveFilters, MakeFilters(filters), true);
 		if (inDirectory)
 			sSavePanel->SetPanelDirectory(directory);
 		if (sSavePanel->Window()->Lock()) {
@@ -1622,10 +1758,7 @@ pc_host_file_panel(int32_t id, int32_t save, const char* name,
 	delete sOpenPanel;
 	sOpenPanel = new BFilePanel(B_OPEN_PANEL, &target, NULL,
         save == 2 ? B_DIRECTORY_NODE : B_FILE_NODE, save == 3, NULL, NULL, false, true);
-	ExtensionFilter* filter = new ExtensionFilter(extensions);
-	sOpenPanel->SetRefFilter(filter);
-	delete sOpenFilter;
-	sOpenFilter = filter;
+	SetPanelFilters(sOpenPanel, sOpenFilters, MakeFilters(filters), false);
 	BMessage message(B_REFS_RECEIVED);
 	message.AddInt32(kDialogField, id);
 	sOpenPanel->SetMessage(&message);
@@ -1711,27 +1844,195 @@ pc_host_alert(const char* title, const char* text)
 }
 
 
-extern "C" int32_t
-pc_clipboard_files(const char* paths)
+// #pragma mark - Key Store
+
+
+extern "C" {
+
+
+// The Key Store keyring the application's secrets go in.
+static const char* kKeyring = "Digital IDs";
+
+
+static void
+AppendField(std::string& out, const void* data, size_t length)
 {
-    if (!be_clipboard->Lock()) return -1;
-    be_clipboard->Clear();
-    BMessage* clip = be_clipboard->Data();
-    status_t status = B_ERROR;
-    if (clip != NULL) {
-        BString list(paths);
-        int32 start = 0;
-        while (start < list.Length()) {
-            int32 end = list.FindFirst('\n', start);
-            if (end < 0) end = list.Length();
-            BString path;
-            list.CopyInto(path, start, end - start);
-            entry_ref ref;
-            if (get_ref_for_path(path.String(), &ref) == B_OK) clip->AddRef("refs", &ref);
-            start = end + 1;
-        }
-        status = be_clipboard->Commit();
-    }
-    be_clipboard->Unlock();
-    return status == B_OK ? 0 : -1;
+	uint32_t size = (uint32_t)length;
+	out.append((const char*)&size, sizeof(size));
+	out.append((const char*)data, length);
+}
+
+
+// The keyring's generic keys (malloc'd, *length bytes): identifier, secondary
+// identifier and data of each, every field a native-endian 32-bit length and its
+// bytes. NULL when the keyring can't be read (*status says why; a keyring that
+// doesn't exist yet is empty).
+void*
+pc_keystore_list(size_t* length, int32_t* status)
+{
+	*length = 0;
+	BKeyStore store;
+	std::string out;
+	uint32 cookie = 0;
+	BKey key;
+	status_t result;
+	while ((result = store.GetNextKey(kKeyring, B_KEY_TYPE_GENERIC,
+			B_KEY_PURPOSE_ANY, cookie, key)) == B_OK) {
+		AppendField(out, key.Identifier(), strlen(key.Identifier()));
+		AppendField(out, key.SecondaryIdentifier(),
+			strlen(key.SecondaryIdentifier()));
+		AppendField(out, key.Data(), key.DataLength());
+	}
+	// B_ENTRY_NOT_FOUND: past the last key; B_BAD_VALUE at once: no such
+	// keyring yet.
+	bool none = result == B_BAD_VALUE && cookie == 0;
+	*status = result == B_ENTRY_NOT_FOUND || none ? B_OK : result;
+	if (*status != B_OK)
+		return NULL;
+	return CopyOut(out.data(), out.size(), length);
+}
+
+
+// Keeps a secret in the keyring (made if it isn't there), replacing one with
+// the same identifier. The Key Store asks the user once for each kind of
+// access, so the one there is only looked up when adding finds it.
+int32_t
+pc_keystore_add(const char* identifier, const char* name, const void* data,
+	size_t length)
+{
+	BKeyStore store;
+	status_t result = store.AddKeyring(kKeyring);
+	if (result != B_OK && result != B_NAME_IN_USE)
+		return result;
+	BKey key(B_KEY_PURPOSE_GENERIC, identifier, name, (const uint8*)data,
+		length);
+	result = store.AddKey(kKeyring, key);
+	if (result != B_NAME_IN_USE)
+		return result;
+	BKey old;
+	result = store.GetKey(kKeyring, B_KEY_TYPE_GENERIC, identifier, old);
+	if (result == B_OK)
+		result = store.RemoveKey(kKeyring, old);
+	return result == B_OK ? store.AddKey(kKeyring, key) : result;
+}
+
+
+int32_t
+pc_keystore_remove(const char* identifier)
+{
+	BKeyStore store;
+	BKey key;
+	status_t result = store.GetKey(kKeyring, B_KEY_TYPE_GENERIC, identifier,
+		key);
+	if (result != B_OK)
+		return result;
+	return store.RemoveKey(kKeyring, key);
+}
+
+
+const char*
+pc_error_string(int32_t status)
+{
+	return strerror(status);
+}
+
+
+}
+
+
+// Tracker's copy mode for a file on the clipboard (kCopySelectionTo in its
+// Commands.h): a paste there copies it.
+static const int32 kTrackerCopy = 'Tcsl';
+
+
+// Puts files on the clipboard the ways air/OS programs paste them: as Tracker
+// copies them (a ref named "r<device>_<node>" with its mode "m<device>_<node>"),
+// as "refs", as text/uri-list (one file: URI per line, `uris`) and as their
+// paths in text/plain.
+extern "C" int32_t
+pc_clipboard_files(const char* paths, const char* uris)
+{
+	if (!be_clipboard->Lock())
+		return -1;
+	be_clipboard->Clear();
+	BMessage* clip = be_clipboard->Data();
+	status_t status = B_ERROR;
+	if (clip != NULL) {
+		status = B_OK;
+		BString list(paths);
+		int32 start = 0;
+		while (status == B_OK && start < list.Length()) {
+			int32 end = list.FindFirst('\n', start);
+			if (end < 0)
+				end = list.Length();
+			BString path;
+			list.CopyInto(path, start, end - start);
+			start = end + 1;
+			entry_ref ref;
+			node_ref node;
+			BEntry entry(path.String());
+			if (entry.GetRef(&ref) != B_OK || entry.GetNodeRef(&node) != B_OK)
+				continue;
+			BString name;
+			name.SetToFormat("r%" B_PRIdDEV "_%" B_PRIdINO, node.device,
+				node.node);
+			BString mode(name);
+			mode.SetByteAt(0, 'm');
+			status = clip->AddRef(name.String(), &ref);
+			if (status == B_OK)
+				status = clip->AddInt32(mode.String(), kTrackerCopy);
+			if (status == B_OK)
+				status = clip->AddRef("refs", &ref);
+		}
+		if (status == B_OK) {
+			status = clip->AddData("text/uri-list", B_MIME_TYPE, uris,
+				strlen(uris));
+		}
+		if (status == B_OK) {
+			status = clip->AddData("text/plain", B_MIME_TYPE, paths,
+				strlen(paths));
+		}
+		if (status == B_OK)
+			status = be_clipboard->Commit();
+	}
+	be_clipboard->Unlock();
+	return status == B_OK ? 0 : -1;
+}
+
+
+// The paths of the files on the clipboard, one per line (malloc'd; NULL when
+// there are none): every entry_ref there, as Tracker copies files ("r…"
+// fields) or as "refs", each file once.
+extern "C" char*
+pc_clipboard_paths()
+{
+	if (!be_clipboard->Lock())
+		return NULL;
+	std::vector<std::string> paths;
+	BMessage* clip = be_clipboard->Data();
+	char* name;
+	type_code type;
+	int32 count;
+	for (int32 i = 0; clip != NULL
+			&& clip->GetInfo(B_REF_TYPE, i, &name, &type, &count) == B_OK; i++) {
+		entry_ref ref;
+		for (int32 j = 0; j < count && clip->FindRef(name, j, &ref) == B_OK;
+				j++) {
+			BPath path(&ref);
+			if (path.InitCheck() == B_OK
+				&& std::find(paths.begin(), paths.end(), path.Path())
+					== paths.end())
+				paths.push_back(path.Path());
+		}
+	}
+	be_clipboard->Unlock();
+	if (paths.empty())
+		return NULL;
+	std::string text;
+	for (size_t i = 0; i < paths.size(); i++) {
+		if (i > 0)
+			text += '\n';
+		text += paths[i];
+	}
+	return strdup(text.c_str());
 }

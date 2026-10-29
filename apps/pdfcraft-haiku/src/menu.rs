@@ -112,6 +112,30 @@ pub fn describe(bar: &MenuBar) -> (String, HashMap<String, Chosen>) {
     (out, items)
 }
 
+/// A file panel's filters for `host.cpp` (`MakeFilters` there), which lists them in the panel's
+/// file type menu: one line each, the label then the extensions. A filter without a label is
+/// named by its extensions, as `*.pdf, *.png`.
+pub fn filter_spec(filters: &[(String, Vec<String>)]) -> String {
+    let mut out = String::new();
+    for (label, extensions) in filters {
+        let extensions: Vec<String> = extensions.iter().map(|e| field(e.trim())).filter(|e| !e.is_empty()).collect();
+        let label = match field(label.trim()) {
+            l if l.is_empty() => extensions.iter().map(|e| format!("*.{e}")).collect::<Vec<_>>().join(", "),
+            l => l,
+        };
+        if label.is_empty() {
+            continue;
+        }
+        out.push_str(&label);
+        for e in &extensions {
+            out.push(SEP);
+            out.push_str(e);
+        }
+        out.push('\n');
+    }
+    out
+}
+
 /// The menus' shape: when it changes, `host.cpp` builds them again rather than updating labels
 /// and states in place.
 pub fn shape(bar: &MenuBar) -> (u64, u64) {
@@ -269,6 +293,18 @@ mod tests {
         let recent = items.get("file.open_recent {\"index\":0}").map(|c| &c.command);
         assert_eq!(recent, Some(&CommandRef::with_params("file.open_recent", serde_json::json!({ "index": 0 }))));
         assert_eq!(items.get("file.open").and_then(|c| c.shortcut), Some(chord("Ctrl+O")));
+    }
+
+    #[test]
+    fn file_panel_filters_keep_their_labels_and_order() {
+        let filters = vec![
+            ("PDF".to_owned(), vec!["pdf".to_owned()]),
+            ("Images and text\n(converted)".to_owned(), vec!["png".to_owned(), " jpg ".to_owned(), String::new()]),
+            (String::new(), vec!["csv".to_owned(), "txt".to_owned()]),
+            (String::new(), Vec::new()),
+        ];
+        assert_eq!(filter_spec(&filters), "PDF\u{1f}pdf\nImages and text (converted)\u{1f}png\u{1f}jpg\n*.csv, *.txt\u{1f}csv\u{1f}txt\n");
+        assert_eq!(filter_spec(&[]), "");
     }
 
     #[test]

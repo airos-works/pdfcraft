@@ -12,6 +12,7 @@
 // Elsewhere only the platform-neutral parts build (and are tested).
 #![cfg_attr(not(target_os = "haiku"), allow(dead_code))]
 
+mod clip;
 mod damage;
 mod keys;
 mod menu;
@@ -164,6 +165,8 @@ OPTIONS:
             app.restore(&json);
         }
         app.integrated_titlebar = false;
+        // Digital IDs can be kept in the Key Store (`tools/sign_ui/key_store.rs` in the UI crate).
+        app.os_key_store_ids = true;
         app.motion.reduced = true;
         if let Err(e) = services::install() {
             log::error!("{e}");

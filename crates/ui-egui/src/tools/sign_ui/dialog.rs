@@ -64,6 +64,8 @@ fn choose(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) -> bool {
                 tl!("Keychain  ·  ").to_string()
             } else if e.path.starts_with("windows:") {
                 tl!("Windows store  ·  ").to_string()
+            } else if e.path.starts_with("keystore:") {
+                tl!("Key Store  ·  ").to_string()
             } else {
                 String::new()
             };
@@ -102,7 +104,13 @@ fn choose(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) -> bool {
     // Remove takes a digital ID file off the list after asking (#1396); OS key store IDs stay.
     let mut remove = None;
     if let Some(e) = d.confirm_remove.and_then(|i| ids.get(i)) {
-        ui.label(crate::i18n::fmt(tl!("Remove \"{name}\" from this list? The file itself is not deleted."), &[("name", &e.name)]));
+        // A Key Store ID (air/OS) is in no file: removing it deletes it.
+        let question = if e.path.starts_with("keystore:") {
+            tl!("Delete \"{name}\" from the Key Store? It can't be used to sign again.")
+        } else {
+            tl!("Remove \"{name}\" from this list? The file itself is not deleted.")
+        };
+        ui.label(crate::i18n::fmt(question, &[("name", &e.name)]));
         ui.horizontal(|ui| {
             if widgets::pill_button(ui, tl!("Remove"), true).clicked() {
                 remove = d.confirm_remove;
@@ -113,7 +121,7 @@ fn choose(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) -> bool {
         });
         ui.add_space(10.0);
     }
-    let removable = d.selected.filter(|&i| ids.get(i).is_some_and(|e| !e.path.starts_with("keychain:") && !e.path.starts_with("windows:")));
+    let removable = d.selected.filter(|&i| ids.get(i).is_some_and(|e| !super::is_os_key_store_id(&e.path)));
     ui.horizontal(|ui| {
         if widgets::pill_button(ui, tl!("Configure New Digital ID"), false).clicked() {
             d.step = SignStep::Configure;
@@ -199,6 +207,11 @@ fn configure(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) -> bool {
             ui.add(crate::widgets::line(&mut n.file_password).password(true).desired_width(200.0)).labelled_by(l.id);
             ui.end_row();
         });
+    }
+    // air/OS: the ID can go in the Key Store instead of a file (still sealed with its password).
+    if cfg!(target_os = "haiku") && app.os_key_store_ids {
+        ui.add_space(4.0);
+        ui.add(widgets::checkbox(&mut n.key_store, tl!("Keep it in the Key Store")));
     }
     ui.add_space(6.0);
     error(ui, &d.error);
@@ -357,7 +370,7 @@ fn sign_as(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) -> bool {
             &[("verb", if d.certify.is_some() { tl!("Certify") } else { tl!("Sign") }), ("name", &entry.name)],
         ),
     );
-    let in_os_key_store = entry.path.starts_with("keychain:") || entry.path.starts_with("windows:");
+    let in_os_key_store = super::is_os_key_store_id(&entry.path);
     let mut close = false;
     let mut go = false;
     #[cfg(not(target_arch = "wasm32"))]

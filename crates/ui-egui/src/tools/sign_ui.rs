@@ -15,6 +15,8 @@ use crate::theme::{self, Tokens};
 use crate::{PdfCraftApp, icons, widgets};
 
 mod dialog;
+#[cfg(any(target_os = "haiku", test))]
+mod key_store;
 mod panel;
 
 #[cfg(test)]
@@ -68,6 +70,9 @@ pub struct NewIdDraft {
     /// Use a Digital ID from a file: its path and password.
     pub file: String,
     pub file_password: String,
+    /// Keep the new or chosen ID in the system's key store (air/OS's Key Store) rather than
+    /// in a file the list points to.
+    pub key_store: bool,
 }
 
 impl Default for NewIdDraft {
@@ -84,6 +89,7 @@ impl Default for NewIdDraft {
             confirm: String::new(),
             file: String::new(),
             file_password: String::new(),
+            key_store: false,
         }
     }
 }
@@ -243,6 +249,12 @@ fn save_new_id_file(dir: &std::path::Path, stem: &str, p12: &[u8]) -> std::io::R
     Err(std::io::Error::new(ErrorKind::AlreadyExists, "no free file name for the digital ID"))
 }
 
+/// Whether a list entry is an identity the OS keeps and signs with (the Keychain's, the Windows
+/// store's): listed again at each signing, never removed from the list, no password asked.
+pub(crate) fn is_os_key_store_id(path: &str) -> bool {
+    path.starts_with("keychain:") || path.starts_with("windows:")
+}
+
 /// A Keychain identity by its `keychain:` reference.
 fn keychain_id(reference: &str) -> Result<DigitalId, String> {
     #[cfg(target_os = "macos")]
@@ -307,7 +319,22 @@ impl PdfCraftApp {
 
     /// List OS key store signing identities (after the file-based IDs).
     fn refresh_os_key_store_ids(&mut self) {
-        self.digital_ids.retain(|e| !e.path.starts_with("keychain:") && !e.path.starts_with("windows:"));
+        self.digital_ids.retain(|e| !is_os_key_store_id(&e.path) && !e.path.starts_with("keystore:"));
+        #[cfg(target_os = "haiku")]
+        if self.os_key_store_ids {
+            match key_store::identities() {
+                Ok(ids) => {
+                    for (reference, name, certificate) in ids {
+                        let mut entry = entry_for(&reference, &certificate);
+                        if !name.is_empty() {
+                            entry.name = name;
+                        }
+                        self.digital_ids.push(entry);
+                    }
+                }
+                Err(e) => self.notify_fmt("The Key Store's digital IDs couldn't be listed: {e}", &[("e", &e)]),
+            }
+        }
         #[cfg(target_os = "macos")]
         if self.os_key_store_ids {
             match sign::keychain::identities(None) {
@@ -355,8 +382,17 @@ impl PdfCraftApp {
     /// Take the digital ID file at `index` off the list (issue #1396). The file itself stays on
     /// disk. Keychain and Windows store IDs belong to the OS and are listed again on every
     /// signing, so they can't be removed here. The open dialog's selection follows the list.
+    /// On air/OS an ID PdfCraft keeps in the Key Store is deleted from it (nothing else shows
+    /// those).
     pub fn remove_digital_id(&mut self, index: usize) -> bool {
-        if self.digital_ids.get(index).is_none_or(|e| e.path.starts_with("keychain:") || e.path.starts_with("windows:")) {
+        if self.digital_ids.get(index).is_none_or(|e| is_os_key_store_id(&e.path)) {
+            return false;
+        }
+        #[cfg(target_os = "haiku")]
+        if let Some(reference) = self.digital_ids.get(index).map(|e| e.path.clone()).filter(|p| p.starts_with(key_store::PREFIX))
+            && let Err(e) = key_store::remove(&reference)
+        {
+            self.notify_fmt("The digital ID couldn't be deleted from the Key Store: {e}", &[("e", &e)]);
             return false;
         }
         self.digital_ids.remove(index);
@@ -402,6 +438,15 @@ impl PdfCraftApp {
         let cert = Certificate::self_signed(&dn, &key, sign::Time::from_unix(now), 5, &serial).map_err(|e| e.to_string())?;
         let id = DigitalId { key, certificate: cert.clone(), chain: Vec::new(), friendly_name: Some(d.name.trim().to_string()) };
         let p12 = sign::pkcs12::write(&id, &d.password).map_err(|e| e.to_string())?;
+        #[cfg(target_os = "haiku")]
+        if d.key_store && self.os_key_store_ids {
+            let reference = key_store::add(&cert, d.name.trim(), &p12)?;
+            let index = self.add_digital_id(&reference, &cert);
+            if let Some(entry) = self.digital_ids.get_mut(index) {
+                d.name.trim().clone_into(&mut entry.name);
+            }
+            return Ok(index);
+        }
         let dir = match &self.export_dir_override {
             Some(p) => Some(PathBuf::from(p)),
             None => id_dir(),
@@ -421,6 +466,17 @@ impl PdfCraftApp {
             sign::SignError::WrongPassword => "The password is incorrect.".to_string(),
             e => e.to_string(),
         })?;
+        // The file as it is, still sealed with its password.
+        #[cfg(target_os = "haiku")]
+        if d.key_store && self.os_key_store_ids {
+            let name = id.friendly_name.clone().unwrap_or_else(|| id.certificate.display_name());
+            let reference = key_store::add(&id.certificate, &name, &bytes)?;
+            let index = self.add_digital_id(&reference, &id.certificate);
+            if let Some(entry) = self.digital_ids.get_mut(index) {
+                entry.name = name;
+            }
+            return Ok(index);
+        }
         Ok(self.add_digital_id(&d.file, &id.certificate))
     }
 
@@ -439,6 +495,13 @@ impl PdfCraftApp {
         } else if entry.path.starts_with("windows:") {
             windows_id(&entry.path)?
         } else {
+            #[cfg(target_os = "haiku")]
+            let bytes = if entry.path.starts_with(key_store::PREFIX) {
+                key_store::p12(&entry.path)?
+            } else {
+                std::fs::read(&entry.path).map_err(|e| format!("{}: {e}", entry.path))?
+            };
+            #[cfg(not(target_os = "haiku"))]
             let bytes = std::fs::read(&entry.path).map_err(|e| format!("{}: {e}", entry.path))?;
             sign::pkcs12::open(&bytes, &d.password).map_err(|e| match e {
                 sign::SignError::WrongPassword => "The password is incorrect.".to_string(),

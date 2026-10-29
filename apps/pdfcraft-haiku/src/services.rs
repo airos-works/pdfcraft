@@ -1,5 +1,6 @@
 //! BFilePanel requests run asynchronously; the UI thread routes replies to picker workers.
 use crate::host;
+use pdfcraft_ui_egui::native_services::key_store::{KeyStore, Stored};
 use pdfcraft_ui_egui::native_services::{self, clipboard::ImageData, file_dialog::AsyncFileDialog};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicI32, Ordering};
@@ -34,7 +35,6 @@ fn pick(dialog: AsyncFileDialog) -> Vec<PathBuf> {
     } else {
         return Vec::new();
     }
-    let extensions: Vec<&str> = dialog.extensions.iter().map(String::as_str).collect();
     let title = if dialog.title.is_empty() {
         match dialog.mode {
             1 => "Save As",
@@ -44,7 +44,7 @@ fn pick(dialog: AsyncFileDialog) -> Vec<PathBuf> {
     } else {
         &dialog.title
     };
-    host::file_panel(id, dialog.mode, &dialog.name, &dialog.directory, &extensions, &format!("PdfCraft: {title}"));
+    host::file_panel(id, dialog.mode, &dialog.name, &dialog.directory, &dialog.filters, &format!("PdfCraft: {title}"));
     let paths = rx.recv().unwrap_or_default();
     if dialog.mode == 1
         && let Ok(mut saved) = SAVED.lock()
@@ -53,8 +53,18 @@ fn pick(dialog: AsyncFileDialog) -> Vec<PathBuf> {
     }
     paths
 }
+/// The clipboard's text: its `text/plain`, else the files on it (copied in Tracker) as their
+/// paths, else its `text/uri-list` (files as paths, links as links), as a file manager's copy
+/// pastes as text on Linux.
 pub fn clipboard_text() -> Option<String> {
-    host::clipboard_get("text/plain").map(|v| String::from_utf8_lossy(&v).trim_end_matches('\0').to_string())
+    if let Some(text) = host::clipboard_get("text/plain") {
+        return Some(String::from_utf8_lossy(&text).trim_end_matches('\0').to_string());
+    }
+    if let Some(paths) = host::clipboard_paths() {
+        return Some(paths);
+    }
+    let list = host::clipboard_get("text/uri-list")?;
+    Some(crate::clip::uri_list_text(&String::from_utf8_lossy(&list))).filter(|t| !t.is_empty())
 }
 fn clipboard_image() -> Result<ImageData<'static>, String> {
     let bytes = host::clipboard_get("image/png").ok_or("no PNG image on the clipboard")?;
@@ -76,6 +86,11 @@ pub fn install() -> Result<(), &'static str> {
         clipboard_image,
         set_image,
         set_files: |paths| host::clipboard_files(paths).then_some(()).ok_or_else(|| "could not copy files".into()),
+        key_store: KeyStore {
+            list: || Ok(host::keystore_list()?.into_iter().map(|(identifier, name, data)| Stored { identifier, name, data }).collect()),
+            add: |s| host::keystore_add(&s.identifier, &s.name, &s.data),
+            remove: host::keystore_remove,
+        },
     })
 }
 

@@ -95,6 +95,36 @@ if rounding makes that disagree with the frame size it falls back to app_server.
 (craft-quit's Quit) is now a close request for the next frame, as in egui-winit, so the
 unsaved-changes prompt runs; it used to quit at once.
 
+## File panels, clipboard and Key Store
+
+**File panels.** Each `add_filter` of a picker is a `BRefFilter` of its own (`MakeFilters` in
+`host.cpp`), the first one showing; a pop-up menu of the filters' labels sits beside the
+panel's folder menu (Haiku's `BFilePanel` has no file type menu), and choosing one switches the
+panel's ref filter. A filter of `*` shows every file; folders always show.
+
+**Clipboard.** Upstream copies and pastes plain text (egui's), PNG images (Create ▸ Clipboard,
+snapshots) and file lists (Copy image file); it offers no rich text anywhere, so there is
+nothing to map to `text/html` or Haiku's `text/plain` + `application/x-vnd.Be-text_run_array`
+(styled text from StyledEdit pastes as its `text/plain`). Files go out the ways air/OS programs
+paste them: as Tracker copies them (a ref `r<device>_<node>` and its mode `m<device>_<node>` =
+copy, so Paste in a Tracker window copies the file there), as `refs`, as `text/uri-list` and as
+their paths in `text/plain`. Where the interface pastes text, a clipboard without `text/plain`
+gives the files on it (copied in Tracker) as their paths, else its `text/uri-list` (files as
+paths, links as links), as a file manager's copy pastes on Linux (`src/clip.rs`).
+
+**Key Store.** `os_key_store_ids` is on: digital IDs can be kept in air/OS's Key Store, as the
+Keychain and the Windows certificate store keep them (`crates/ui-egui/src/tools/sign_ui/key_store.rs`).
+Configure New Digital ID has "Keep it in the Key Store" for both a new ID and one from a file;
+such an ID is in the keyring "Digital IDs" under `keystore:<SHA-256 of the certificate>`, named
+after its holder, and is listed again from the Key Store at each signing ("Key Store · ").
+Remove deletes it from the Key Store. The Key Store asks the user before PdfCraft reads the
+keyring the first time (Allow once / Always). Unlike the Keychain, the Key Store only keeps data
+and doesn't encrypt its database yet (`Keyring::_EncryptToFlatBuffer` in keystore_server is a
+TODO), so the ID goes in as its PKCS #12, still sealed with its own password, with its
+certificate beside it for the list; signing asks for the password as for a file. The
+automation tools (`sign_document`) take `keychain:` and `windows:` IDs but not `keystore:` ones:
+the engine below the interface has no access to the host's services.
+
 ## Build
 
 ```sh

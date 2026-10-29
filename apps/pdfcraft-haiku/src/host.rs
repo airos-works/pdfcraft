@@ -87,7 +87,7 @@ unsafe extern "C" {
     fn pc_clipboard_get(mime: *const c_char, len: *mut usize) -> *mut c_void;
     fn pc_clipboard_set(text: *const c_char, text_len: usize, html: *const c_char, html_len: usize) -> i32;
     fn pc_clipboard_set_picture(mime: *const c_char, data: *const c_void, len: usize) -> i32;
-    fn pc_host_file_panel(id: i32, save: i32, name: *const c_char, directory: *const c_char, extensions: *const c_char, title: *const c_char) -> i32;
+    fn pc_host_file_panel(id: i32, save: i32, name: *const c_char, directory: *const c_char, filters: *const c_char, title: *const c_char) -> i32;
     fn pc_host_open_url(url: *const c_char) -> i32;
     fn pc_host_alert(title: *const c_char, text: *const c_char);
     fn pc_host_type_file(path: *const c_char) -> i32;
@@ -468,11 +468,11 @@ pub fn clipboard_set_picture(mime: &str, data: &[u8]) -> bool {
     unsafe { pc_clipboard_set_picture(m.as_ptr(), data.as_ptr().cast(), data.len()) == 0 }
 }
 
-/// Shows an Open panel (offering `extensions`; `*` is any file) or a Save panel (suggesting
-/// `name`), in `directory` unless that is empty; the answer comes back as a
-/// [`kind::DIALOG_ANSWER`] event with `id`.
-pub fn file_panel(id: i32, mode: i32, name: &str, directory: &str, extensions: &[&str], title: &str) {
-    let (n, d, e, t) = (c(name), c(directory), c(&extensions.join("\n")), c(title));
+/// Shows an Open panel or a Save panel (suggesting `name`), in `directory` unless that is empty,
+/// with `filters` (label and extensions, `*` for any file; the first one shows) in a menu to
+/// switch between them; the answer comes back as a [`kind::DIALOG_ANSWER`] event with `id`.
+pub fn file_panel(id: i32, mode: i32, name: &str, directory: &str, filters: &[(String, Vec<String>)], title: &str) {
+    let (n, d, e, t) = (c(name), c(directory), c(&crate::menu::filter_spec(filters)), c(title));
     // SAFETY: valid C strings; the host copies them.
     unsafe { pc_host_file_panel(id, mode, n.as_ptr(), d.as_ptr(), e.as_ptr(), t.as_ptr()) };
 }
@@ -508,11 +508,86 @@ pub fn alert(title: &str, text: &str) {
 }
 
 unsafe extern "C" {
-    fn pc_clipboard_files(paths: *const c_char) -> i32;
+    fn pc_clipboard_files(paths: *const c_char, uris: *const c_char) -> i32;
+    fn pc_clipboard_paths() -> *mut c_char;
 }
-/// Copy file references in Tracker's native clipboard format.
+
+/// Copies files the ways air/OS programs paste them: as Tracker copies them (so a paste in a
+/// Tracker window copies them there), as `refs`, as `text/uri-list` and as their paths.
 pub fn clipboard_files(paths: &[std::path::PathBuf]) -> bool {
     let joined = c(&paths.iter().map(|p| p.to_string_lossy()).collect::<Vec<_>>().join("\n"));
-    // SAFETY: the native call copies the NUL-terminated path list before returning.
-    unsafe { pc_clipboard_files(joined.as_ptr()) == 0 }
+    let uris = c(&crate::clip::uri_list(paths));
+    // SAFETY: the native call copies the NUL-terminated lists before returning.
+    unsafe { pc_clipboard_files(joined.as_ptr(), uris.as_ptr()) == 0 }
+}
+
+/// The paths of the files on the clipboard (copied in Tracker, or as `refs`), one per line.
+pub fn clipboard_paths() -> Option<String> {
+    // SAFETY: no arguments; the text comes back from strdup, or NULL.
+    let p = unsafe { pc_clipboard_paths() };
+    (!p.is_null()).then(|| take_string(p))
+}
+
+unsafe extern "C" {
+    fn pc_keystore_list(len: *mut usize, status: *mut i32) -> *mut c_void;
+    fn pc_keystore_add(identifier: *const c_char, name: *const c_char, data: *const c_void, len: usize) -> i32;
+    fn pc_keystore_remove(identifier: *const c_char) -> i32;
+    fn pc_error_string(status: i32) -> *const c_char;
+}
+
+/// What a Haiku status code means.
+fn error_text(status: i32) -> String {
+    // SAFETY: strerror's text is static and NUL-terminated.
+    let text = unsafe { CStr::from_ptr(pc_error_string(status)) }.to_string_lossy().into_owned();
+    format!("{text} ({status:#x})")
+}
+
+/// A secret in the Key Store's "Digital IDs" keyring: identifier, secondary identifier (the
+/// name people see) and data.
+pub type KeyStoreEntry = (String, String, Vec<u8>);
+
+/// The keyring's entries. The Key Store asks the user first when an application reads the
+/// keyring for the first time, and this waits for the answer.
+pub fn keystore_list() -> Result<Vec<KeyStoreEntry>, String> {
+    let (mut len, mut status) = (0usize, 0i32);
+    // SAFETY: two writable values; the buffer comes back from malloc.
+    let p = unsafe { pc_keystore_list(&mut len, &mut status) };
+    if status != 0 {
+        return Err(error_text(status));
+    }
+    let bytes = take_bytes(p, len).unwrap_or_default();
+    // Each field: a native-endian u32 length and its bytes.
+    let mut rest = bytes.as_slice();
+    let mut field = || -> Option<Vec<u8>> {
+        let (n, tail) = rest.split_first_chunk::<4>()?;
+        let n = usize::try_from(u32::from_ne_bytes(*n)).ok()?;
+        let (value, tail) = (tail.get(..n)?, tail.get(n..)?);
+        rest = tail;
+        Some(value.to_vec())
+    };
+    let mut out = Vec::new();
+    while let Some(identifier) = field() {
+        let (Some(name), Some(data)) = (field(), field()) else { break };
+        out.push((String::from_utf8_lossy(&identifier).into_owned(), String::from_utf8_lossy(&name).into_owned(), data));
+    }
+    Ok(out)
+}
+
+/// Keeps a secret in the keyring, replacing one with the same identifier.
+pub fn keystore_add(identifier: &str, name: &str, data: &[u8]) -> Result<(), String> {
+    let (i, n) = (c(identifier), c(name));
+    // SAFETY: valid C strings and a live buffer; the host copies them.
+    match unsafe { pc_keystore_add(i.as_ptr(), n.as_ptr(), data.as_ptr().cast(), data.len()) } {
+        0 => Ok(()),
+        e => Err(error_text(e)),
+    }
+}
+
+pub fn keystore_remove(identifier: &str) -> Result<(), String> {
+    let i = c(identifier);
+    // SAFETY: a valid C string.
+    match unsafe { pc_keystore_remove(i.as_ptr()) } {
+        0 => Ok(()),
+        e => Err(error_text(e)),
+    }
 }
