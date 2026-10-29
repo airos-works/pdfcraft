@@ -110,6 +110,22 @@ held for the next frame (egui drops the deltas of a gesture that ended). air/OS'
 no pinch gesture: Command with the wheel or a two-finger scroll zooms (egui's zoom modifier), as
 do the zoom buttons.
 
+## Input methods
+
+The canvas view is `B_INPUT_METHOD_AWARE`: an input method (Japanese, Chinese, Korean…) composes
+in the focused text field itself: a form field, a comment or sticky note being written, Find, the
+command palette. Its `B_INPUT_METHOD_EVENT`s become egui's IME events: `CHANGED` is the pre-edit
+(its `be:selection` the active clause), `CHANGED` with `be:confirmed` the commit, and `STOPPED`
+without one drops the pre-edit. A `LOCATION_REQUEST` is answered with the caret (egui's
+`IMEOutput::cursor_rect`) for each character, converted to the screen by the canvas view, so
+the candidate window opens by it, below the menu bar's height included. When the interface
+interrupts the composition (a click elsewhere, the field losing the keyboard) the host sends the
+input method `B_INPUT_METHOD_STOPPED` and ignores what it sends afterwards until it starts again;
+the pre-edit stays in the field as typed text, as in a `BTextView`. On air/OS the interface has
+no face for Chinese or Japanese yet (craft-fonts aren't bundled, and the system's Noto Sans CJK
+isn't among upstream's installed fallback faces), so a CJK pre-edit shows "no glyph" boxes; a
+form field shows `?` for characters its PDF font lacks and keeps the real text in its value.
+
 ## Updates and community links
 
 air/OS installs and updates PdfCraft as a package (pkgman, SoftwareUpdater): Help has no Check
@@ -211,6 +227,14 @@ were exercised through the opt-in control channel and native Be scripting:
   a second instance ignores live snapshots, then force-stop the test instance and
   recover/save its unsaved changes on relaunch.
 
+`tools/haiku/input-probe.cpp` (built on air/OS: `g++ -o input-probe input-probe.cpp -lbe`)
+sends a running copy the input a test machine can't make: an input method's composition (`ime`,
+`ime-cancel`), a pointer position, a touchpad gesture or wheel turn; it also lists the
+clipboard's types and opens files with a given copy as Tracker does (`open`). Its pointer moves
+lose to the real pointer when that is over the window; place the pointer with the control
+channel's `ui.move` instead. egui sends input methods nothing while the window isn't active:
+activate it (`hey <team> set Active of Window 0 to true`) right before an `ime` run.
+
 Host checks (2026-10-18):
 
 - `cargo test -j 2 -p pdfcraft-haiku -p pdfcraft-ui-egui --lib --tests`: 1,294 passed,
@@ -232,7 +256,7 @@ ports (upstream thread-local initializers). It does not disable other diagnostic
 
 - PDF pages are still rendered by the engine on the CPU; only the interface is drawn with Vulkan.
 - Direct native printing is not wired up yet; print-ready PDF export remains available.
-- IME composition, native accessibility nodes and persistent window geometry are not implemented.
+- Native accessibility nodes and persistent window geometry are not implemented.
 - Clipboard images currently use PNG, rather than archived native BBitmap data.
 - Optional OCR models and craft-fonts are not bundled. Upstream errors describe missing models.
 - Upstream's alpha PDF format and editing limitations still apply.

@@ -64,6 +64,16 @@ pub mod kind {
     pub const COLORS: i32 = 18;
     /// A menu bar item was chosen; the text is its command's key (`menu.rs`).
     pub const MENU: i32 = 19;
+    pub const IME: i32 = 20;
+}
+
+/// What an input method's [`kind::IME`] event (its `id`) says: the text being composed (the
+/// selected clause from byte `key` to `raw_char`, or -1), the confirmed text, or that the input
+/// method stopped.
+pub mod ime {
+    pub const PREEDIT: i32 = 1;
+    pub const COMMIT: i32 = 2;
+    pub const STOPPED: i32 = 3;
 }
 
 unsafe extern "C" {
@@ -96,6 +106,8 @@ unsafe extern "C" {
     fn pc_clipboard_set_picture(mime: *const c_char, data: *const c_void, len: usize) -> i32;
     fn pc_host_file_panel(id: i32, save: i32, name: *const c_char, directory: *const c_char, filters: *const c_char, title: *const c_char) -> i32;
     fn pc_host_open_url(url: *const c_char) -> i32;
+    fn pc_host_ime_caret(known: i32, left: f32, top: f32, right: f32, bottom: f32);
+    fn pc_host_ime_stop();
     fn pc_host_alert(title: *const c_char, text: *const c_char);
     fn pc_host_type_file(path: *const c_char) -> i32;
     fn pc_host_claim_types(signature: *const c_char, types: *const c_char) -> i32;
@@ -482,6 +494,20 @@ pub fn file_panel(id: i32, mode: i32, name: &str, directory: &str, filters: &[(S
     let (n, d, e, t) = (c(name), c(directory), c(&crate::menu::filter_spec(filters)), c(title));
     // SAFETY: valid C strings; the host copies them.
     unsafe { pc_host_file_panel(id, mode, n.as_ptr(), d.as_ptr(), e.as_ptr(), t.as_ptr()) };
+}
+
+/// Where the caret is (canvas coordinates, logical pixels: left, top, right, bottom) for an
+/// input method's candidate window, or `None` when nothing takes typing.
+pub fn ime_caret(rect: Option<[f32; 4]>) {
+    let [l, t, r, b] = rect.unwrap_or_default();
+    // SAFETY: no pointers.
+    unsafe { pc_host_ime_caret(i32::from(rect.is_some()), l, t, r, b) }
+}
+
+/// Ends the input method's composition, if one is going on.
+pub fn ime_stop() {
+    // SAFETY: no arguments.
+    unsafe { pc_host_ime_stop() }
 }
 
 /// Opens a URL with its preferred application.
