@@ -1199,9 +1199,9 @@ static void ChooseFilter(const BMessage* message);
 
 class PcApp : public BApplication {
 public:
-	PcApp(const char* signature)
+	PcApp(const char* signature, status_t* error)
 		:
-		BApplication(signature)
+		BApplication(signature, error)
 	{
 	}
 
@@ -1222,7 +1222,45 @@ public:
 
 	virtual void ArgvReceived(int32 argc, char** argv)
 	{
-		// The Rust side reads its own command line.
+		// The Rust side reads its own command line. Another launch's, handed
+		// over as this copy is already running (B_SINGLE_LAUNCH), opens its
+		// documents here: the arguments that aren't options (nor an option's
+		// value), relative to the folder it was started in.
+		BMessage* message = CurrentMessage();
+		if (message == NULL || !message->IsSourceRemote())
+			return;
+		const char* cwd = NULL;
+		message->FindString("cwd", &cwd);
+		std::string paths;
+		for (int32 i = 1; i < argc; i++) {
+			if (strncmp(argv[i], "--", 2) == 0) {
+				// Every option but --version, --help and --new-window takes
+				// a value (src/main.rs).
+				if (strcmp(argv[i], "--new-window") != 0
+					&& strcmp(argv[i], "--version") != 0
+					&& strcmp(argv[i], "--help") != 0)
+					i++;
+				continue;
+			}
+			if (argv[i][0] == '-' && argv[i][1] != '\0')
+				continue;
+			BPath path;
+			if (argv[i][0] != '/' && cwd != NULL)
+				path.SetTo(cwd, argv[i], true);
+			else
+				path.SetTo(argv[i], NULL, true);
+			if (path.InitCheck() != B_OK)
+				continue;
+			if (!paths.empty())
+				paths += '\n';
+			paths += path.Path();
+		}
+		// Even without documents (only options): the running copy's window
+		// comes to the front, as for a launch without arguments
+		// (B_SILENT_RELAUNCH).
+		PcEvent event = MakeEvent(PC_OPEN_FILES);
+		event.text_len = paths.size();
+		Push(event, paths);
 	}
 
 	virtual bool QuitRequested()
@@ -1262,6 +1300,14 @@ public:
 			case kFilterChosen:
 				ChooseFilter(message);
 				break;
+			case B_SILENT_RELAUNCH:
+				// A launch without arguments while this copy runs (the
+				// Deskbar, Tracker's icon): BApplication only activates the
+				// team, which leaves a minimized window down. The window
+				// comes forward as for opened documents.
+				Push(MakeEvent(PC_OPEN_FILES));
+				BApplication::MessageReceived(message);
+				break;
 			default:
 				BApplication::MessageReceived(message);
 		}
@@ -1290,13 +1336,20 @@ CopyOut(const void* data, size_t length, size_t* _length)
 extern "C" {
 
 
+// Creates the application: 0, 1 when a copy started from the same file is
+// already running (B_SINGLE_LAUNCH) and has been handed this launch's
+// arguments, or -1.
 int32_t
 pc_host_init(const char* signature)
 {
 	if (be_app != NULL)
 		return 0;
-	new PcApp(signature);
-	return be_app != NULL && be_app->InitCheck() == B_OK ? 0 : -1;
+	// Not deleted when it failed: the process ends.
+	status_t error = B_OK;
+	new PcApp(signature, &error);
+	if (error == B_ALREADY_RUNNING)
+		return 1;
+	return error == B_OK && be_app != NULL ? 0 : -1;
 }
 
 

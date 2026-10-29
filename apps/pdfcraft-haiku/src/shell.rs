@@ -310,10 +310,14 @@ impl Shell {
                     self.set_modifiers(0);
                 }
             }
+            // The window's close button and Quit (Command+Q, the Deskbar's) alike: the one
+            // window holds every document as a tab, and upstream's close guard (`guard_quit`)
+            // asks about each one with unsaved changes in turn before the app quits.
             kind::CLOSE | kind::QUIT_REQUESTED => self.close_requested = true,
-            // Tracker's Open, Open With and drops on the icon, and files dropped on the
-            // window: they open as PDFs, as File › Open opens them (the desktop app
-            // opens dropped files the same way).
+            // Tracker's Open, Open With and drops on the icon, the documents of a later
+            // launch (one copy runs: B_SINGLE_LAUNCH), and files dropped on the window: they
+            // open as tabs, as the desktop app opens what another launch or Finder hands it
+            // (`OsEvent::Open`), and the window comes forward.
             kind::OPEN_FILES | kind::DROPPED_FILES => {
                 for path in text.lines().filter(|l| !l.is_empty()) {
                     self.app.open_path(path);

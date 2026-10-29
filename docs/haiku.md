@@ -32,13 +32,35 @@ The host uses `BApplication`, `BWindow`, `BView`, `BBitmap`, `BFilePanel`,
 Vulkan on a hardware GPU (Rendering, below), else by the siblings' CPU rasterizer with dirty
 bands; both follow the air/OS display density.
 Open, multiple-file, folder and save pickers use native asynchronous panels. Both
-Control and Command map to editing shortcuts. Tracker launches and drops open PDFs.
+Control and Command map to editing shortcuts. Tracker launches and drops open PDFs, as tabs
+of the one running copy.
 The engine retains its own software PDF renderer and font handling.
 
 Settings and logs live under `~/config/settings/PdfCraft`, with recovery in its
 `Recovery` subfolder. Recovery locks use Haiku's `flock` through rustix, as in
-WordCraft. The engine and UI forbid unsafe Rust; the host's documented FFI wrappers
+WordCraft: one copy runs from each executable file (One running copy, below), but copies
+started from different files, such as a test build beside the package, run at the same time,
+and a running copy's recovery snapshot mustn't look like a crash's. The engine and UI forbid unsafe Rust; the host's documented FFI wrappers
 (`src/host.rs`) and its raw Vulkan frame buffer import (`src/scanout.rs`) are the only exceptions. C++ is limited to the native Be API boundary.
+
+## One running copy
+
+PdfCraft is `B_SINGLE_LAUNCH` (`PdfCraft.rdef`), as the desktop app keeps one instance
+(`single_instance.rs`, macOS's open events): one copy runs from each executable file. PDFs opened
+in Tracker while it runs (double-click, Open With, drops on its icon) arrive in the running copy
+as `B_REFS_RECEIVED`, and a launch from Terminal (`PdfCraft report.pdf`) hands its arguments to it
+(`B_ARGV_RECEIVED`: relative paths resolved against the launch's folder; options and their values,
+such as `--page 3` or `--control FILE`, are ignored, since the desktop app gives a launch with
+options a window of its own, which the air/OS host can't) and ends before it touches the log
+file, the preferences or the recovery folder (`BApplication` reports `B_ALREADY_RUNNING`). The
+documents open as tabs, as the desktop app opens what another launch or Finder hands it
+(`OsEvent::Open` → `open_path`): a document already open comes to the front instead, and the
+window comes forward, un-minimized. A launch without documents (the Deskbar, `B_SILENT_RELAUNCH`)
+only brings the window forward. Quitting (Command+Q, the Deskbar's Quit, File › Quit) asks about
+every open document with unsaved changes in turn, as upstream's close guard does for the
+desktop app's window, then quits. A test copy that must run beside the installed one runs from a
+file of its own (and so does `--control`: a second launch of the same file with it only hands
+over its documents).
 
 ## Rendering
 

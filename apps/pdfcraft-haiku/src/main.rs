@@ -232,6 +232,18 @@ OPTIONS:
             }
         }));
         let args = args();
+        // Before the log file, the preferences or the recovery folder are touched: a second
+        // launch (from Terminal; Tracker hands documents to the running copy itself) passes its
+        // documents to the running copy, where they open as tabs, and ends, as the desktop app
+        // hands them over through its single-instance socket.
+        match host::init(services::SIGNATURE) {
+            Ok(host::Launch::Started) => {}
+            Ok(host::Launch::HandedOver) => std::process::exit(0),
+            Err(e) => {
+                log::error!("{e}");
+                std::process::exit(1);
+            }
+        }
         if let Some(logger) = logger
             && let Some(dir) = log_dir().filter(|_| prefs_enabled())
         {
@@ -239,10 +251,6 @@ OPTIONS:
                 Ok(path) => log::info!("PdfCraft {} ({}) for air/OS, log file {}", env!("CARGO_PKG_VERSION"), build_sha(), path.display()),
                 Err(e) => log::warn!("no log file: {e}"),
             }
-        }
-        if let Err(e) = host::init(services::SIGNATURE) {
-            log::error!("{e}");
-            std::process::exit(1);
         }
         if prefs_enabled() {
             services::claim_document_types();

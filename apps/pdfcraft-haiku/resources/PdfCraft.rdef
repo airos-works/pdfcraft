@@ -9,9 +9,10 @@ resource app_signature "application/x-vnd.storytold-PdfCraft";
 // is read-only, so relying on mimeset to add it after installation is too late.
 resource(2, "BEOS:TYPE") #'MIMS' "application/x-vnd.Be-elfexecutable";
 
-// Each PDF opened from Tracker starts a window of its own process, as on
-// the other desktops; files opened while it runs arrive as B_REFS_RECEIVED.
-resource app_flags B_MULTIPLE_LAUNCH;
+// One copy runs, as the desktop app's single instance: PDFs opened from
+// Tracker while it runs arrive in it as B_REFS_RECEIVED and open as tabs, and
+// a launch from Terminal hands its arguments over (B_ARGV_RECEIVED) and ends.
+resource app_flags B_SINGLE_LAUNCH;
 
 resource app_version {
 	major = 0,
