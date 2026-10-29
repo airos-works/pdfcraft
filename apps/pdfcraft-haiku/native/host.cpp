@@ -28,6 +28,8 @@
 #include <InterfaceDefs.h>
 #include <Locale.h>
 #include <LocaleRoster.h>
+#include <MenuBar.h>
+#include <MenuItem.h>
 #include <Message.h>
 #include <Messenger.h>
 #include <Mime.h>
@@ -48,6 +50,7 @@
 #include <string.h>
 
 #include <algorithm>
+#include <atomic>
 #include <chrono>
 #include <condition_variable>
 #include <deque>
@@ -107,10 +110,16 @@ enum {
 	PC_MOVED = 16,
 	PC_MINIMIZED = 17,
 	PC_COLORS = 18,
+	PC_MENU = 19,
 };
 
 static const uint32 kDialogAnswer = 'dcDA';
 static const char* kDialogField = "dc:dialog";
+// A menu bar item was chosen: its command ("pc:command", src/menu.rs's key).
+static const uint32 kMenuChosen = 'pcMN';
+static const char* kMenuCommandField = "pc:command";
+// A menu update that waited for the menus to close.
+static const uint32 kMenuApply = 'pcMA';
 
 
 // #pragma mark - Event queue
@@ -217,6 +226,10 @@ static std::mutex sDirectLock;
 static PcDirectSink sDirectSink = NULL;
 static PcDirect sDirect;
 static bool sDirectReported = false;
+// Where the canvas starts in the window (logical pixels): under the menu bar, if
+// there is one. The window's direct connection covers the menu bar too; frames
+// go into the screen only below it.
+static std::atomic<float> sCanvasTop(0);
 static int32_t sDirectRects[kMaxDirectRects * 4];
 
 
@@ -489,19 +502,87 @@ private:
 };
 
 
+// #pragma mark - Menu bar
+
+
+// One line of a menu bar description from src/menu.rs: its fields, split at
+// the unit separator. "M label" and "S label" start a menu and a submenu, "E"
+// ends one, "-" is a separator, and "I command label flags char modifiers" an
+// item (flags: 1 enabled, 2 marked; char: the shortcut's character code, 0 for
+// none; modifiers: Haiku's modifier bits).
+static std::vector<std::vector<std::string> >
+ParseMenuSpec(const std::string& spec)
+{
+	std::vector<std::vector<std::string> > lines;
+	size_t start = 0;
+	while (start < spec.size()) {
+		size_t end = spec.find('\n', start);
+		if (end == std::string::npos)
+			end = spec.size();
+		std::vector<std::string> fields;
+		size_t field = start;
+		while (true) {
+			size_t next = spec.find('\x1f', field);
+			if (next == std::string::npos || next > end)
+				next = end;
+			fields.push_back(spec.substr(field, next - field));
+			if (next >= end)
+				break;
+			field = next + 1;
+		}
+		if (!fields.empty() && !fields[0].empty())
+			lines.push_back(fields);
+		start = end + 1;
+	}
+	return lines;
+}
+
+
+static int32
+FieldInt(const std::vector<std::string>& fields, size_t index)
+{
+	return index < fields.size() ? atoi(fields[index].c_str()) : 0;
+}
+
+
+static const char*
+FieldText(const std::vector<std::string>& fields, size_t index)
+{
+	return index < fields.size() ? fields[index].c_str() : "";
+}
+
+
 // #pragma mark - Window
 
 
 class PcWindow : public BDirectWindow {
 public:
-	PcWindow(BRect frame, const char* title)
+	PcWindow(BRect frame, const char* title, bool menuBar)
 		:
 		BDirectWindow(frame, title, B_TITLED_WINDOW,
-			B_ASYNCHRONOUS_CONTROLS | DirectPresentFlags())
+			B_ASYNCHRONOUS_CONTROLS | DirectPresentFlags()),
+		fMenuBar(NULL),
+		fTracking(false),
+		fPendingMenu(false),
+		fPendingRebuild(false)
 	{
-		fView = new PcView(Bounds());
+		// The menus come from the interface (pc_host_menu_set); the bar is
+		// here from the start, so the window opens at its final size.
+		if (menuBar) {
+			fMenuBar = new BMenuBar(BRect(0, 0, Bounds().Width(), 0), "menu bar");
+			AddChild(fMenuBar);
+			// It takes its height from the menu font only when first laid
+			// out; the canvas goes under it now.
+			float width, height;
+			fMenuBar->GetPreferredSize(&width, &height);
+			fMenuBar->ResizeTo(Bounds().Width(), height);
+		}
+		BRect canvas = Bounds();
+		canvas.top = CanvasTop();
+		fView = new PcView(canvas);
 		AddChild(fView);
 		fView->MakeFocus(true);
+		sCanvasTop = canvas.top;
 		// The interface has its own Cut, Copy, Paste, Select All and Close
 		// (with a Save Changes prompt), so these keys reach it as keys.
 		RemoveShortcut('W', B_COMMAND_KEY);
@@ -531,8 +612,10 @@ public:
 			message->FindInt32("modifiers", &modifiers);
 			message->FindInt32("raw_char", &rawChar);
 			message->FindString("bytes", &bytes);
+			// Command+Escape opens the menu bar the Haiku way.
+			bool menuKey = fMenuBar != NULL && rawChar == B_ESCAPE;
 			if ((modifiers & B_COMMAND_KEY) != 0 && rawChar != 'q'
-				&& rawChar != 'Q') {
+				&& rawChar != 'Q' && !menuKey) {
 				fView->Key(PC_KEY_DOWN, message, bytes,
 					bytes != NULL ? strlen(bytes) : 0);
 				return;
@@ -575,9 +658,101 @@ public:
 			case B_COLORS_UPDATED:
 				Push(MakeEvent(PC_COLORS));
 				break;
+			case B_FONTS_UPDATED:
+				// The menu bar's height follows the menu font.
+				Relayout();
+				BWindow::MessageReceived(message);
+				break;
+			case kMenuChosen:
+			{
+				const char* command;
+				if (message->FindString(kMenuCommandField, &command) == B_OK) {
+					PcEvent event = MakeEvent(PC_MENU);
+					std::string text(command);
+					event.text_len = text.size();
+					Push(event, text);
+				}
+				break;
+			}
+			case kMenuApply:
+				if (!fTracking && fPendingMenu) {
+					fPendingMenu = false;
+					ApplyMenu(fPendingSpec, fPendingRebuild);
+					fPendingSpec.clear();
+					fPendingRebuild = false;
+				}
+				break;
 			default:
 				BWindow::MessageReceived(message);
 		}
+	}
+
+	virtual void MenusBeginning()
+	{
+		fTracking = true;
+		BDirectWindow::MenusBeginning();
+	}
+
+	virtual void MenusEnded()
+	{
+		fTracking = false;
+		BDirectWindow::MenusEnded();
+		// After the tracking thread is done with the menus.
+		if (fPendingMenu)
+			PostMessage(kMenuApply);
+	}
+
+	// Called with the window locked: brings the menu bar in step with a
+	// description (ParseMenuSpec). Rebuilt when its structure changed (or the
+	// description doesn't fit the items there), otherwise labels, enabled and
+	// marked updated in place. While a menu is open, the newest description
+	// waits until it closes.
+	void SetMenu(const std::string& spec, bool rebuild)
+	{
+		if (fMenuBar == NULL)
+			return;
+		if (fTracking) {
+			fPendingSpec = spec;
+			fPendingRebuild = fPendingRebuild || rebuild;
+			fPendingMenu = true;
+			return;
+		}
+		ApplyMenu(spec, rebuild);
+	}
+
+	bool Tracking() const { return fTracking; }
+
+	// The canvas's top: under the menu bar while it shows.
+	float CanvasTop() const
+	{
+		// IsHidden() alone is also true while the window is (before Show()).
+		if (fMenuBar == NULL || fMenuBar->IsHidden(fMenuBar))
+			return 0;
+		return fMenuBar->Frame().bottom + 1;
+	}
+
+	// Puts the canvas under the menu bar (or at the top when there is none or
+	// it is hidden).
+	void Relayout()
+	{
+		float top = CanvasTop();
+		BRect frame = fView->Frame();
+		if (frame.top != top) {
+			fView->MoveTo(0, top);
+			fView->ResizeTo(Bounds().Width(), Bounds().Height() - top);
+		}
+		sCanvasTop = top;
+	}
+
+	void ShowMenuBar(bool show)
+	{
+		if (fMenuBar == NULL || fMenuBar->IsHidden(fMenuBar) == !show)
+			return;
+		if (show)
+			fMenuBar->Show();
+		else
+			fMenuBar->Hide();
+		Relayout();
 	}
 
 	PcView* View() const { return fView; }
@@ -606,7 +781,9 @@ public:
 		sDirect.rectCount = 0;
 		if (usable) {
 			sDirect.bounds[0] = info->window_bounds.left;
-			sDirect.bounds[1] = info->window_bounds.top;
+			// The canvas, under the menu bar (device pixels).
+			sDirect.bounds[1] = info->window_bounds.top
+				+ (int32_t)roundf(sCanvasTop * info->device_scale / 100.0f);
 			sDirect.bounds[2] = info->window_bounds.right;
 			sDirect.bounds[3] = info->window_bounds.bottom;
 			sDirect.bytesPerRow = info->bytes_per_row;
@@ -624,7 +801,95 @@ public:
 	}
 
 private:
+	void ApplyMenu(const std::string& spec, bool rebuild)
+	{
+		std::vector<std::vector<std::string> > lines = ParseMenuSpec(spec);
+		if (!rebuild && !UpdateMenu(lines))
+			rebuild = true;
+		if (rebuild)
+			BuildMenu(lines);
+		Relayout();
+	}
+
+	// Labels, enabled and marked in place; false when the items there don't
+	// match the description.
+	bool UpdateMenu(const std::vector<std::vector<std::string> >& lines)
+	{
+		size_t next = 0;
+		for (size_t i = 0; i < lines.size(); i++) {
+			const std::vector<std::string>& line = lines[i];
+			char kind = line[0][0];
+			if (kind != 'M' && kind != 'S' && kind != 'I')
+				continue;
+			if (next >= fItems.size())
+				return false;
+			BMenuItem* item = fItems[next++];
+			const char* label = FieldText(line, kind == 'I' ? 2 : 1);
+			if (strcmp(item->Label(), label) != 0)
+				item->SetLabel(label);
+			if (kind == 'I') {
+				int32 flags = FieldInt(line, 3);
+				if (item->IsEnabled() != ((flags & 1) != 0))
+					item->SetEnabled((flags & 1) != 0);
+				if (item->IsMarked() != ((flags & 2) != 0))
+					item->SetMarked((flags & 2) != 0);
+			}
+		}
+		return next == fItems.size();
+	}
+
+	void BuildMenu(const std::vector<std::vector<std::string> >& lines)
+	{
+		fMenuBar->RemoveItems(0, fMenuBar->CountItems(), true);
+		fItems.clear();
+		std::vector<BMenu*> open;
+		for (size_t i = 0; i < lines.size(); i++) {
+			const std::vector<std::string>& line = lines[i];
+			BMenu* parent = open.empty() ? (BMenu*)fMenuBar : open.back();
+			switch (line[0][0]) {
+				case 'M':
+				case 'S':
+				{
+					BMenu* menu = new BMenu(FieldText(line, 1));
+					BMenuItem* item = new BMenuItem(menu);
+					parent->AddItem(item);
+					fItems.push_back(item);
+					open.push_back(menu);
+					break;
+				}
+				case 'E':
+					if (!open.empty())
+						open.pop_back();
+					break;
+				case '-':
+					if (parent != fMenuBar)
+						parent->AddSeparatorItem();
+					break;
+				case 'I':
+				{
+					BMessage* message = new BMessage(kMenuChosen);
+					message->AddString(kMenuCommandField, FieldText(line, 1));
+					int32 flags = FieldInt(line, 3);
+					BMenuItem* item = new BMenuItem(FieldText(line, 2), message,
+						(char)FieldInt(line, 4), (uint32)FieldInt(line, 5));
+					item->SetEnabled((flags & 1) != 0);
+					item->SetMarked((flags & 2) != 0);
+					parent->AddItem(item);
+					fItems.push_back(item);
+					break;
+				}
+			}
+		}
+	}
+
 	PcView* fView;
+	BMenuBar* fMenuBar;
+	// Every menu, submenu and item, in the description's order.
+	std::vector<BMenuItem*> fItems;
+	bool fTracking;
+	bool fPendingMenu;
+	bool fPendingRebuild;
+	std::string fPendingSpec;
 };
 
 
@@ -831,7 +1096,8 @@ pc_host_init(const char* signature)
 // screen when x is negative), content size width × height.
 int32_t
 pc_host_open_window(const char* title, float x, float y, float width,
-	float height, float minWidth, float minHeight, int32_t zoomed)
+	float height, float minWidth, float minHeight, int32_t zoomed,
+	int32_t menuBar)
 {
 	if (sWindow != NULL)
 		return 0;
@@ -840,7 +1106,14 @@ pc_host_open_window(const char* title, float x, float y, float width,
 	BRect screenFrame = screen.Frame();
 	if (x >= 0 && y >= 0)
 		frame.OffsetTo(x, y);
-	sWindow = new PcWindow(frame, title);
+	sWindow = new PcWindow(frame, title, menuBar != 0);
+	// The sizes are the canvas's: the menu bar comes on top.
+	float bar = sWindow->CanvasTop();
+	if (bar > 0) {
+		sWindow->ResizeBy(0, bar);
+		frame.bottom += bar;
+		minHeight += bar;
+	}
 	sWindow->SetSizeLimits(minWidth - 1, 32768, minHeight - 1, 32768);
 	if (x < 0 || y < 0 || !screenFrame.Intersects(frame)) {
 		// A default size larger than the monitor (a small or dense display)
@@ -998,6 +1271,8 @@ pc_host_window_info(PcWindowInfo* info)
 	if (sWindow == NULL || !sWindow->Lock())
 		return;
 	BRect inner = sWindow->Frame();
+	// The interface's content is the canvas, under the menu bar.
+	inner.top += sWindow->CanvasTop();
 	BRect outer = sWindow->DecoratorFrame();
 	BRect screen = MonitorFrame(sWindow);
 	info->inner_left = inner.left;
@@ -1046,7 +1321,8 @@ pc_host_window_command(int32_t command, float a, float b)
 			break;
 		}
 		case 2:
-			sWindow->ResizeTo(a - 1, b - 1);
+			// The canvas's size: the menu bar comes on top.
+			sWindow->ResizeTo(a - 1, b - 1 + sWindow->CanvasTop());
 			break;
 		case 3:
 			sWindow->Minimize(a != 0);
@@ -1063,7 +1339,8 @@ pc_host_window_command(int32_t command, float a, float b)
 		{
 			float minWidth, maxWidth, minHeight, maxHeight;
 			sWindow->GetSizeLimits(&minWidth, &maxWidth, &minHeight, &maxHeight);
-			sWindow->SetSizeLimits(a - 1, maxWidth, b - 1, maxHeight);
+			sWindow->SetSizeLimits(a - 1, maxWidth, b - 1 + sWindow->CanvasTop(),
+				maxHeight);
 			break;
 		}
         case 7:
@@ -1075,11 +1352,14 @@ pc_host_window_command(int32_t command, float a, float b)
                 BRect screen = MonitorFrame(sWindow);
                 sWindow->SetLook(B_NO_BORDER_WINDOW_LOOK);
                 sWindow->SetFeel(B_FLOATING_ALL_WINDOW_FEEL);
+                // Full screen is the document alone, as on the Mac.
+                sWindow->ShowMenuBar(false);
                 sWindow->MoveTo(screen.LeftTop());
                 sWindow->ResizeTo(screen.Width(), screen.Height());
             } else {
                 sWindow->SetFeel(B_NORMAL_WINDOW_FEEL);
                 sWindow->SetLook(B_TITLED_WINDOW_LOOK);
+                sWindow->ShowMenuBar(true);
                 sWindow->MoveTo(sWindowedFrame.LeftTop());
                 sWindow->ResizeTo(sWindowedFrame.Width(), sWindowedFrame.Height());
             }
@@ -1089,6 +1369,30 @@ pc_host_window_command(int32_t command, float a, float b)
 
 	}
 	sWindow->Unlock();
+}
+
+
+// Brings the menu bar in step with a description (PcWindow::SetMenu):
+// rebuilt when `rebuild` says its structure changed.
+void
+pc_host_menu_set(const char* spec, size_t length, int32_t rebuild)
+{
+	if (sWindow == NULL || !sWindow->Lock())
+		return;
+	sWindow->SetMenu(std::string(spec, length), rebuild != 0);
+	sWindow->Unlock();
+}
+
+
+// Whether one of the menu bar's menus is open.
+int32_t
+pc_host_menu_tracking()
+{
+	if (sWindow == NULL || !sWindow->Lock())
+		return 0;
+	bool tracking = sWindow->Tracking();
+	sWindow->Unlock();
+	return tracking ? 1 : 0;
 }
 
 

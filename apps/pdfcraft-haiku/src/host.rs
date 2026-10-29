@@ -55,11 +55,13 @@ pub mod kind {
     pub const MOVED: i32 = 16;
     pub const MINIMIZED: i32 = 17;
     pub const COLORS: i32 = 18;
+    /// A menu bar item was chosen; the text is its command's key (`menu.rs`).
+    pub const MENU: i32 = 19;
 }
 
 unsafe extern "C" {
     fn pc_host_init(signature: *const c_char) -> i32;
-    fn pc_host_open_window(title: *const c_char, x: f32, y: f32, w: f32, h: f32, min_w: f32, min_h: f32, zoomed: i32) -> i32;
+    fn pc_host_open_window(title: *const c_char, x: f32, y: f32, w: f32, h: f32, min_w: f32, min_h: f32, zoomed: i32, menu_bar: i32) -> i32;
     fn pc_host_run();
     fn pc_host_quit();
     fn pc_host_wait(timeout_us: i64) -> i32;
@@ -74,6 +76,8 @@ unsafe extern "C" {
     fn pc_host_set_title(title: *const c_char);
     fn pc_host_window_command(command: i32, a: f32, b: f32);
     fn pc_host_set_cursor(id: i32);
+    fn pc_host_menu_set(spec: *const c_char, len: usize, rebuild: i32);
+    fn pc_host_menu_tracking() -> i32;
     fn pc_host_modifiers() -> u32;
     fn pc_host_ui_scale() -> f32;
     fn pc_host_device_scale() -> f32;
@@ -136,6 +140,8 @@ pub struct WindowSpec {
     pub size: [f32; 2],
     pub min_size: [f32; 2],
     pub zoomed: bool,
+    /// A menu bar on top of the canvas (the sizes are the canvas's), filled by [`menu_set`].
+    pub menu_bar: bool,
 }
 
 pub fn open_window(spec: &WindowSpec) {
@@ -143,7 +149,17 @@ pub fn open_window(spec: &WindowSpec) {
     let [x, y] = spec.position.unwrap_or([-1.0, -1.0]);
     // SAFETY: a valid C string; the host copies it.
     unsafe {
-        pc_host_open_window(title.as_ptr(), x, y, spec.size[0], spec.size[1], spec.min_size[0], spec.min_size[1], i32::from(spec.zoomed));
+        pc_host_open_window(
+            title.as_ptr(),
+            x,
+            y,
+            spec.size[0],
+            spec.size[1],
+            spec.min_size[0],
+            spec.min_size[1],
+            i32::from(spec.zoomed),
+            i32::from(spec.menu_bar),
+        );
     }
 }
 
@@ -342,6 +358,19 @@ pub fn window_command(cmd: WindowCommand) {
 pub fn set_cursor(id: i32) {
     // SAFETY: no pointers; unknown ids fall back to the default cursor.
     unsafe { pc_host_set_cursor(id) }
+}
+
+/// Brings the window's menu bar in step with a description (`menu.rs`); rebuilt when
+/// `rebuild`, else updated in place. Waits while a menu is open.
+pub fn menu_set(spec: &str, rebuild: bool) {
+    // SAFETY: the pointer and length describe a live buffer the host copies.
+    unsafe { pc_host_menu_set(spec.as_ptr().cast(), spec.len(), i32::from(rebuild)) }
+}
+
+/// Whether one of the menu bar's menus is open.
+pub fn menu_tracking() -> bool {
+    // SAFETY: no arguments.
+    unsafe { pc_host_menu_tracking() != 0 }
 }
 
 /// Haiku's modifier key bits (`modifiers()`).

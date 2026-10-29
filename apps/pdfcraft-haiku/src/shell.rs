@@ -9,6 +9,7 @@ use egui::{Event, Key, Modifiers, PointerButton, Pos2, Theme, ViewportCommand, V
 use pdfcraft_ui_egui::PdfCraftApp;
 
 use crate::host::{self, RawEvent, WindowCommand, kind};
+use crate::menu::Picks;
 use crate::raster::Rasterizer;
 use crate::services;
 use crate::{keys, save_prefs};
@@ -42,6 +43,8 @@ pub struct Shell {
     woken_for: Arc<Mutex<Option<Instant>>>,
     screenshots: Vec<egui::ScreenshotCallback>,
     title: String,
+    /// The menu bar items chosen, for the native menu (`menu.rs`) to take each frame.
+    picks: Picks,
 }
 
 /// egui's cursor as one of Haiku's `BCursorID`s.
@@ -118,7 +121,7 @@ fn start_gpu() -> Result<Option<crate::gpu::Gpu>, String> {
 }
 
 impl Shell {
-    pub fn new(app: PdfCraftApp, ctx: egui::Context, ui_scale: f32) -> Result<Self, String> {
+    pub fn new(app: PdfCraftApp, ctx: egui::Context, ui_scale: f32, picks: Picks) -> Result<Self, String> {
         let gpu = start_gpu()?;
         let dev = host::device_scale();
         let native_ppp = ui_scale * dev;
@@ -152,6 +155,7 @@ impl Shell {
             woken_for,
             screenshots: Vec::new(),
             title: String::new(),
+            picks,
         })
     }
 
@@ -305,6 +309,8 @@ impl Shell {
                 host::window_command(WindowCommand::Activate);
             }
             kind::DIALOG_ANSWER => services::answer(ev.id, ev.x != 0.0, &text),
+            // Run by the app at the next frame, as an in-window menu click is.
+            kind::MENU => self.picks.push(text),
             kind::COLORS => self.check_density(),
             // The next frame picks up the new size, position or state.
             kind::RESIZED | kind::MOVED | kind::MINIMIZED => {}
@@ -437,9 +443,14 @@ impl Shell {
                 host::set_title(t);
             }
             // Honor the editor's unsaved-changes prompt before accepting a native close.
-            let requested = close || vp.commands.iter().any(|c| matches!(c, ViewportCommand::Close));
-            if requested && !vp.commands.iter().any(|c| matches!(c, ViewportCommand::CancelClose)) {
+            if close && !vp.commands.iter().any(|c| matches!(c, ViewportCommand::CancelClose)) {
                 self.quit = true;
+            }
+            // The app asking to close (File ▸ Quit, craft-quit's) is a close request for the next
+            // frame, as in egui-winit: the prompt can still hold the window open.
+            if vp.commands.iter().any(|c| matches!(c, ViewportCommand::Close)) {
+                self.close_requested = true;
+                delay = Duration::ZERO;
             }
             for cmd in &vp.commands {
                 self.command(cmd);

@@ -14,6 +14,7 @@
 
 mod damage;
 mod keys;
+mod menu;
 mod raster;
 
 #[cfg(target_os = "haiku")]
@@ -52,7 +53,7 @@ mod haiku {
 
     use pdfcraft_ui_egui::PdfCraftApp;
 
-    use crate::{host, logging, services, shell, write_control_file};
+    use crate::{host, logging, menu, services, shell, write_control_file};
 
     const USAGE: &str = "\
 PdfCraft — the PdfCraft PDF editor for air/OS
@@ -144,6 +145,12 @@ OPTIONS:
         out
     }
 
+    /// The menus go in the window's menu bar, as on the Mac, unless `PDFCRAFT_MENU=window` keeps
+    /// them in the window's top bar, as on Windows and Linux.
+    fn native_menu() -> bool {
+        std::env::var("PDFCRAFT_MENU").as_deref() != Ok("window")
+    }
+
     fn interface(args: Args, scale: f32) {
         let ctx = egui::Context::default();
         ctx.set_embed_viewports(true);
@@ -188,7 +195,11 @@ OPTIONS:
                 log::warn!("--{key}: {e}");
             }
         }
-        let mut shell = match shell::Shell::new(app, ctx, scale) {
+        let picks = menu::Picks::default();
+        if native_menu() {
+            app.set_native_menu(craft_menu::NativeMenu::new(Box::new(menu::HaikuMenu::new(picks.clone()))));
+        }
+        let mut shell = match shell::Shell::new(app, ctx, scale, picks) {
             Ok(shell) => shell,
             Err(e) => {
                 log::error!("{e}");
@@ -247,6 +258,7 @@ OPTIONS:
             size: DEFAULT_SIZE.map(px),
             min_size: MIN_SIZE.map(px),
             zoomed: false,
+            menu_bar: native_menu(),
         });
         let ui = std::thread::Builder::new().name("PdfCraft interface".into()).stack_size(16 << 20).spawn(move || {
             let ran = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| interface(args, scale)));

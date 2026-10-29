@@ -29,6 +29,8 @@ pdfcraft-engine = { workspace = true }
 pdfcraft-platform = { workspace = true }
 pdfcraft-ui-egui = { workspace = true }
 egui = { workspace = true }
+# The native menu bar (src/menu.rs): craft-menu's menus in a BMenuBar.
+craft-menu = { workspace = true }
 serde_json = { workspace = true }
 # The log's timestamps (`../pdfcraft/src/logging.rs`, shared with the desktop app).
 chrono = { workspace = true }

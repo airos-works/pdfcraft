@@ -597,6 +597,12 @@ impl PdfCraftApp {
         self.native_menu.is_some()
     }
 
+    /// Use another platform's native menu bar (the air/OS host's `BMenuBar`), laid out for this
+    /// build's target like the in-window bar: the in-window bar hides while it is there.
+    pub fn set_native_menu(&mut self, menu: craft_menu::NativeMenu) {
+        self.native_menu = Some(menu);
+    }
+
     /// The native menu's clicks since the last frame, run like in-window ones.
     pub(crate) fn native_menu_clicks(&mut self, ctx: &egui::Context) {
         let gate = self.menu_gate(ctx);
@@ -612,7 +618,8 @@ impl PdfCraftApp {
         if self.native_menu.is_none() {
             return;
         }
-        let layout = craft_menu::mac_layout(&self.menu_bar(ctx), &layout_options());
+        // The Mac layout on macOS; the air/OS host's menu bar has the Linux one.
+        let layout = craft_menu::layout(&self.menu_bar(ctx), Target::current(), &layout_options());
         let gate = self.menu_gate(ctx);
         if let Some(native) = self.native_menu.as_mut() {
             native.set_gate(gate);

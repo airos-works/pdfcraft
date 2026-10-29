@@ -60,6 +60,41 @@ picks how frames reach the window (`readback`, the default; `full`, the whole fr
 few seconds after the import). wgpu's Vulkan backend is enabled for Haiku by the vendored
 `wgpu`, `wgpu-core` and `wgpu-core-deps-windows-linux-android` 30.0.1 (`vendor/README.md`).
 
+## Menu bar
+
+The menus are in a native `BMenuBar` at the top of the window, as the macOS build has them in
+AppKit's menu bar (`apps/pdfcraft-haiku/src/menu.rs`, `PcWindow::SetMenu` in `native/host.cpp`),
+and the in-window menus hide while it is there, as on the Mac. It is craft-menu's `NativeMenu`
+with a Haiku backend, installed with `PdfCraftApp::set_native_menu`: the app's own menu tree
+(`menus.rs`) laid out for the build's target (`Target::current()`, the Linux layout on Haiku:
+Quit last in File, Preferences last in Edit, About last in Help). Every frame upstream's
+`sync_native_menu` lays it out again and the backend sends `host.cpp` a description of it when
+it changed: rebuilt when its structure changed (`craft_menu::structure_key`/`window_key`: recent
+files, open documents), else labels, enabled and marked updated in place. While a menu is open
+the newest description waits for it to close (`MenusEnded`). Check and radio items show as
+marked items; the open documents are listed last in Window. A chosen item comes back as its
+command's key (`PC_MENU`) and runs as an in-window click does (`run_menu_command`), through
+craft-menu's gate (greyed while a dialog is open; Edit's Copy, Cut, Paste and Undo act on a
+focused text field).
+
+Shortcuts show the Haiku way: craft-menu's `cmd` (and `ctrl`, which folds into it off macOS) is
+the Command key, Alt by default (`keys.rs` maps Command and Control to egui's command), Shift
+and Option (`alt`) as they are. The keys themselves still reach egui as keys, as with AppKit's
+key equivalents: `PcWindow::DispatchMessage` hands every Command key to the interface before
+`BWindow` looks for a menu shortcut, except Command+Q (quits through the close guard) and
+Command+Escape (opens the menu bar). Shortcuts without Command (tool keys, bare F-keys, Delete)
+and keys Haiku's menus have no glyph for (F-keys, Escape, End, Page Up/Down, Insert) aren't
+shown: as window shortcuts they would take keys from text fields.
+
+The canvas starts under the menu bar, whose height follows the menu font (and so the UI scale);
+the window's sizes in egui's terms are the canvas's (`InnerSize`, the minimum size, the inner
+rectangle reported to egui), so the window grows by the bar's height. Full screen hides the bar.
+Direct presentation offsets its origin by the bar's height in device pixels (`sCanvasTop`);
+if rounding makes that disagree with the frame size it falls back to app_server.
+`PDFCRAFT_MENU=window` keeps the in-window menus instead. A `ViewportCommand::Close` from the app
+(craft-quit's Quit) is now a close request for the next frame, as in egui-winit, so the
+unsaved-changes prompt runs; it used to quit at once.
+
 ## Build
 
 ```sh
