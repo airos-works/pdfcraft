@@ -61,10 +61,11 @@ mod haiku {
 PdfCraft — the PdfCraft PDF editor for air/OS
 
 USAGE:
-  PdfCraft [--control FILE] [--page N] [--zoom PERCENT] [FILE…]
+  PdfCraft [--control FILE] [--two-paged] [--page N] [--zoom PERCENT] [FILE…]
 
 OPTIONS:
   --control FILE      opt-in authenticated loopback control; writes private endpoint JSON
+  --two-paged         open the named PDFs in noncontinuous two-page view
   --version           print the version
   -h, --help          print this help
 ";
@@ -114,9 +115,12 @@ OPTIONS:
         files: Vec<String>,
         options: Vec<(String, String)>,
         control: Option<String>,
+        /// `--two-paged`: the named PDFs open two pages at a time, not continuous, without
+        /// changing the default view (the desktop app's `startup.rs`).
+        two_paged: bool,
     }
     fn args() -> Args {
-        let mut out = Args { files: Vec::new(), options: Vec::new(), control: None };
+        let mut out = Args { files: Vec::new(), options: Vec::new(), control: None, two_paged: false };
         let mut args = std::env::args().skip(1);
         while let Some(arg) = args.next() {
             match arg.as_str() {
@@ -136,6 +140,9 @@ OPTIONS:
                     }
                 }
                 "--new-window" => {}
+                "--two-paged" => out.two_paged = true,
+                // It has no value: the next argument stays a file.
+                flag if flag.starts_with("--two-paged=") => log::warn!("{flag}: use --two-paged without a value"),
                 option if option.starts_with("--") => {
                     if let Some(value) = args.next() {
                         out.options.push((option.trim_start_matches("--").into(), value));
@@ -192,10 +199,17 @@ OPTIONS:
         // named on the command line (Tracker's) open after them, in front, as on the desktop.
         app.reopen_last_files(&args.files);
         for f in &args.files {
-            app.open_path(f);
+            if args.two_paged {
+                app.open_path_with_display(f, pdfcraft_ui_egui::canvas::PageLayout::TwoUp, false);
+            } else {
+                app.open_path(f);
+            }
         }
+        // An explicit --layout still wins for the active document, whatever the order.
+        let defer_layout = args.two_paged && !args.files.is_empty();
         for (key, value) in args.options {
-            if let Err(e) = app.set_option(&key, &value) {
+            let result = if defer_layout && key == "layout" { app.set_launch_layout(&value) } else { app.set_option(&key, &value) };
+            if let Err(e) = result {
                 log::warn!("--{key}: {e}");
             }
         }

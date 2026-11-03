@@ -27,6 +27,16 @@ and arboard are not dependencies on Haiku. Pickers can now open in a folder
 region's measurement unit and reopens the last session when that preference is on.
 Package `0.15.0~airos1-1` is the first build of this merge.
 
+The 2026-11-04 merge of upstream `801fd3aa` (0.18.0, craft-libs `787a7a0f`, egui unchanged)
+added `os_clipboard`, upstream's one lock around every system clipboard access; on air/OS it
+wraps the same `crate::clipboard` seam (the host's `BClipboard` services, errors as `String`).
+craft-update's new `CheckResultDialog` stays out of the air/OS build: Check for updates keeps
+the package dialog (Updates and community links, below). The desktop app's `--two-paged`
+(open the named PDFs two pages at a time, `--layout` still winning for the active one) is
+accepted by the host too. The menus gained no items (the new Select/Hand tool commands have no
+menu), so the native menu bar needed no change. Package `0.18.0~airos1-1` is the first build
+of this merge.
+
 The host uses `BApplication`, `BWindow`, `BView`, `BBitmap`, `BFilePanel`,
 `BClipboard`, `BCursor`, `BLocaleRoster` and `BMimeType`. The interface is drawn with
 Vulkan on a hardware GPU (Rendering, below), else by the siblings' CPU rasterizer with dirty
