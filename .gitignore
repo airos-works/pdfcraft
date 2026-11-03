@@ -16,3 +16,4 @@ __pycache__/
 
 /target-linux/
 /target-wasm/
+.claude/

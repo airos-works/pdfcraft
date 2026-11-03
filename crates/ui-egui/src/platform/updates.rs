@@ -1,5 +1,6 @@
 //! Help ▸ Check for updates and the check at start, through `craft_update`: the flow itself is its
-//! `Updater`; this module supplies the suite, the quit path and the status dialog.
+//! `Updater`; this module supplies the suite and the quit path, and shows the result in
+//! `craft_update`'s `CheckResultDialog`.
 //!
 //! air/OS installs and updates PdfCraft as a package (pkgman, SoftwareUpdater), so there Check
 //! for updates only says so: upstream's release downloads aren't offered.
@@ -8,9 +9,10 @@
 use craft_update::updater::{Action, Status};
 #[cfg(not(target_arch = "wasm32"))]
 use craft_update::updater::{CheckSource, Updater};
-use egui::{Align, Layout};
+#[cfg(not(any(target_arch = "wasm32", target_os = "haiku")))]
+use craft_update::{CheckResultDialog, CheckResultResponse};
 
-use crate::{PdfCraftApp, theme, widgets};
+use crate::PdfCraftApp;
 
 /// Where every PdfCraft release is listed.
 pub const RELEASES_PAGE: &str = "https://github.com/storytold/pdfcraft/releases";
@@ -35,7 +37,7 @@ impl Default for Updates {
     fn default() -> Self {
         Self {
             #[cfg(not(target_arch = "wasm32"))]
-            updater: Updater::new(&craft_update::suite::PDFCRAFT, env!("CARGO_PKG_VERSION")),
+            updater: Updater::new(&crate::UPDATE_APP, env!("CARGO_PKG_VERSION")),
             open: false,
             #[cfg(not(target_arch = "wasm32"))]
             startup_check: false,
@@ -55,7 +57,7 @@ impl PdfCraftApp {
     /// Replaces the network with `source` (tests).
     #[cfg(not(target_arch = "wasm32"))]
     pub fn set_update_source(&mut self, source: UpdateSource) {
-        self.updates.updater = Updater::new(&craft_update::suite::PDFCRAFT, env!("CARGO_PKG_VERSION")).with_source(source);
+        self.updates.updater = Updater::new(&crate::UPDATE_APP, env!("CARGO_PKG_VERSION")).with_source(source);
     }
 
     /// Help ▸ Check for updates: ask for the latest release and show the outcome.
@@ -108,58 +110,49 @@ pub(crate) fn dialog(app: &mut PdfCraftApp, ctx: &egui::Context) {
         if app.updates.open && !app.updates.check_requested && matches!(app.updates.updater.status(), Status::Idle) {
             app.updates.open = false;
         }
+        if app.updates.open {
+            let dialog = CheckResultDialog::new(&crate::UPDATE_APP, env!("CARGO_PKG_VERSION"));
+            match dialog.show(ctx, app.updates.updater.status()) {
+                CheckResultResponse::None => {}
+                CheckResultResponse::Close => {
+                    app.updates.open = false;
+                    app.updates.updater.dismiss_status();
+                }
+                CheckResultResponse::CheckAgain => app.updates.check_requested = true,
+            }
+        }
     }
+    #[cfg(target_os = "haiku")]
+    package_dialog(app, ctx);
+    #[cfg(target_arch = "wasm32")]
+    let _ = (app, ctx);
+}
+
+/// air/OS: Check for updates (the command palette, the control channel) names the version and
+/// leaves updating to the package manager; nothing asks upstream's releases.
+#[cfg(target_os = "haiku")]
+fn package_dialog(app: &mut PdfCraftApp, ctx: &egui::Context) {
+    use crate::{theme, widgets};
+    use egui::{Align, Layout};
+
     if !app.updates.open {
         return;
     }
     let t = theme::Tokens::get(ctx);
     let current = env!("CARGO_PKG_VERSION");
     let mut close = false;
-    let modal = crate::widgets::show_modal(ctx, "updates", |ui| {
+    let modal = widgets::show_modal(ctx, "updates", |ui| {
         ui.set_width(420.0);
         ui.horizontal(|ui| {
             ui.add(crate::icons::image("cloud", 22.0, t.accent));
             ui.label(egui::RichText::new(tl!("Check for updates")).font(theme::semibold(16.0)));
         });
         ui.add_space(8.0);
-        #[cfg(not(any(target_arch = "wasm32", target_os = "haiku")))]
-        match app.updates.updater.status() {
-            Status::Idle => {
-                ui.horizontal(|ui| {
-                    ui.spinner();
-                    ui.label(tl!("Checking for a newer version…"));
-                });
-            }
-            Status::Checking => {
-                ui.horizontal(|ui| {
-                    ui.spinner();
-                    ui.label(tl!("Checking for a newer version…"));
-                });
-            }
-            Status::UpToDate => {
-                ui.label(crate::i18n::fmt(tl!("PdfCraft {c} is up to date."), &[("c", current)]));
-            }
-            Status::Failed(e) => {
-                ui.label(crate::i18n::fmt(tl!("Couldn't check for updates: {e}"), &[("e", e)]));
-                ui.label(
-                    egui::RichText::new(crate::i18n::fmt(
-                        tl!("You have version {c}. All releases are listed at {page}."),
-                        &[("c", current), ("page", RELEASES_PAGE)],
-                    ))
-                    .color(t.text_muted),
-                );
-            }
-        }
-        #[cfg(target_os = "haiku")]
-        {
-            ui.label(crate::i18n::fmt(tl!("You have PdfCraft {c}."), &[("c", current)]));
-            ui.label(
-                egui::RichText::new(tl!("PdfCraft is updated with the system's packages: SoftwareUpdater installs newer versions."))
-                    .color(t.text_muted),
-            );
-        }
-        #[cfg(target_arch = "wasm32")]
-        let _ = (&t, current);
+        ui.label(crate::i18n::fmt(tl!("You have PdfCraft {c}."), &[("c", current)]));
+        ui.label(
+            egui::RichText::new(tl!("PdfCraft is updated with the system's packages: SoftwareUpdater installs newer versions."))
+                .color(t.text_muted),
+        );
         ui.add_space(10.0);
         ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
             if widgets::pill_button(ui, tl!("Close"), true).clicked() {
@@ -167,12 +160,8 @@ pub(crate) fn dialog(app: &mut PdfCraftApp, ctx: &egui::Context) {
             }
         });
     });
-    if modal.should_close() {
-        close = true;
-    }
-    if close {
+    if modal.should_close() || close {
         app.updates.open = false;
-        #[cfg(not(target_arch = "wasm32"))]
         app.updates.updater.dismiss_status();
     }
 }
