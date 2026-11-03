@@ -65,14 +65,14 @@ Based on upstream PdfCraft; this is an independent modified fork.
 <!-- airos-ci:latest-builds:start -->
 ## Latest builds
 
-Built automatically by air/OS CI from commit `16859e2` on 2026-10-31 ([all files](https://github.com/airos-works/pdfcraft/releases/tag/latest)).
+Built automatically by air/OS CI from commit `106c117` on 2026-11-03 ([all files](https://github.com/airos-works/pdfcraft/releases/tag/latest)).
 
 | Architecture | Package |
 |---|---|
-| arm64 | [pdfcraft-0.15.0.airos1-3-arm64.hpkg](https://github.com/airos-works/pdfcraft/releases/download/latest/pdfcraft-0.15.0.airos1-3-arm64.hpkg) |
-| x86_64 | [pdfcraft-0.15.0.airos1-3-x86_64.hpkg](https://github.com/airos-works/pdfcraft/releases/download/latest/pdfcraft-0.15.0.airos1-3-x86_64.hpkg) |
+| arm64 | [pdfcraft-0.18.0.airos1-1-arm64.hpkg](https://github.com/airos-works/pdfcraft/releases/download/latest/pdfcraft-0.18.0.airos1-1-arm64.hpkg) |
+| x86_64 | [pdfcraft-0.18.0.airos1-1-x86_64.hpkg](https://github.com/airos-works/pdfcraft/releases/download/latest/pdfcraft-0.18.0.airos1-1-x86_64.hpkg) |
 
-Install with `pkgman install <file>`, or copy the file into `/boot/system/packages`. Haiku SDK: x86_64 hrev60207-2163-g761d19d6d1, arm64 hrev60207-2161-g9ce0b7382e.
+Install with `pkgman install <file>`, or copy the file into `/boot/system/packages`. Haiku SDK: x86_64 hrev60207-2447-gcbdd6fbb4a, arm64 hrev60207-2447-gcbdd6fbb4a.
 <!-- airos-ci:latest-builds:end -->
 
 ## Community
