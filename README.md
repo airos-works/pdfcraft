@@ -65,7 +65,7 @@ Based on upstream PdfCraft; this is an independent modified fork.
 <!-- airos-ci:latest-builds:start -->
 ## Latest builds
 
-Built automatically by air/OS CI from commit `106c117` on 2026-11-03 ([all files](https://github.com/airos-works/pdfcraft/releases/tag/latest)).
+Built automatically by air/OS CI from commit `7ef7bf6` on 2026-11-04 ([all files](https://github.com/airos-works/pdfcraft/releases/tag/latest)).
 
 | Architecture | Package |
 |---|---|
