@@ -1584,6 +1584,14 @@ fn dialog_about(ui: &mut egui::Ui, req: &mut Pending) -> bool {
                 .small(),
             );
             ui.add_space(12.0);
+            // air/OS builds are a modified version: LICENSE-brand.txt lets them say, in plain
+            // text, what they are based on, but not present themselves as part of ArtCraft.
+            #[cfg(target_os = "haiku")]
+            ui.label(
+                egui::RichText::new("PdfCraft for air/OS is based on PdfCraft by the ArtCraft team; it is not an ArtCraft product.")
+                    .color(t.text_muted),
+            );
+            #[cfg(not(target_os = "haiku"))]
             ui.horizontal(|ui| {
                 ui.label(egui::RichText::new(tl!("Part of")).color(t.text_muted));
                 widgets::artcraft_logo(ui, 16.0);

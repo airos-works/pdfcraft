@@ -1,7 +1,7 @@
 # PdfCraft for air/OS
 
 Initial native Be API port. Build and validation instructions: [docs/haiku.md](docs/haiku.md).
-Based on upstream PdfCraft; this is an independent modified fork.
+Based on [PdfCraft](https://github.com/storytold/pdfcraft) by the ArtCraft team; this is an independent modified fork and not an ArtCraft product.
 
 
 <p align="center">
@@ -77,13 +77,13 @@ Install with `pkgman install <file>`, or copy the file into `/boot/system/packag
 
 ## Community
 
-PdfCraft is part of [ArtCraft](https://getartcraft.com). Come say hello, get help and follow development:
+Upstream PdfCraft is made by the [ArtCraft](https://getartcraft.com) team; this air/OS fork is based on it and is not an ArtCraft product. The ArtCraft community is the place to say hello, get help and follow upstream development:
 
 - **Discord: [discord.gg/artcraft](https://discord.gg/artcraft)**. This is the fastest way to get help and share feedback. The app has a Discord button in its title bar.
 - **Web page:** [getartcraft.com/apps/pdfcraft](https://getartcraft.com/apps/pdfcraft)
 - **Source:** [github.com/storytold/pdfcraft](https://github.com/storytold/pdfcraft)
 
-The ArtCraft name and logos in `docs/brand/` are trademarks of the ArtCraft Team and are not open source. They may be used only unmodified, and only as part of PdfCraft (see `docs/brand/LICENSE-brand.txt`). Forks and modified versions must remove them.
+The ArtCraft name and logos are trademarks of the ArtCraft Team and are not open source. This fork is a modified version, so as `docs/brand/LICENSE-brand.txt` requires, the marks have been removed from it (`docs/brand/README.md`).
 
 ## Highlights
 
@@ -537,13 +537,11 @@ with its author, source and license in [ATTRIBUTION.md](ATTRIBUTION.md). Release
 the Japanese fonts of [craft-fonts](https://github.com/storytold/craft-fonts/blob/main/ATTRIBUTION.md)
 (SIL Open Font License 1.1).
 
-The ArtCraft name, wordmark and logos in [`docs/brand/`](docs/brand/) are trademarks of the
-ArtCraft Team and are not covered by this license. They may be used only unmodified, and only as
-part of this repository and PdfCraft, under [`docs/brand/LICENSE-brand.txt`](docs/brand/LICENSE-brand.txt).
-Forks and modified versions must remove them.
+The ArtCraft name, wordmark and logos are trademarks of the ArtCraft Team and are not covered by
+this license. This fork is a modified version, so as [`docs/brand/LICENSE-brand.txt`](docs/brand/LICENSE-brand.txt)
+requires, the marks have been removed from it ([`docs/brand/README.md`](docs/brand/README.md)).
 
-<p align="center">
-  <sub>Made by the <a href="https://getartcraft.com/">ArtCraft</a> team and community.</sub>
-</p>
+PdfCraft for air/OS is based on [PdfCraft](https://github.com/storytold/pdfcraft) by the
+[ArtCraft](https://getartcraft.com/) team. It is not an ArtCraft product.
 
 The Tools panel sits on the left, or on the right with Preferences ▸ Tools panel side. The rail stays at the right edge and opens one side panel beside it. Drag a panel's inner edge to resize it; widths are remembered. F4 shows or hides the side panel and Shift+F4 the Tools panel (also in the View menu); View ▸ Reset side panels restores the default arrangement.
