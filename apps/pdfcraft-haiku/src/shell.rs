@@ -31,6 +31,10 @@ pub struct Shell {
     /// Device pixels per logical pixel ([`host::device_scale`]), and when it was last asked.
     dev: f32,
     dev_checked: Instant,
+    /// When the main window's last frame started, and the shortest time between two
+    /// ([`host::frame_interval`]).
+    last_frame: Instant,
+    min_interval: Duration,
     buttons: i32,
     modifiers: Modifiers,
     focused: bool,
@@ -151,6 +155,8 @@ impl Shell {
             ui_scale,
             dev,
             dev_checked: Instant::now(),
+            last_frame: Instant::now(),
+            min_interval: host::frame_interval(),
             buttons: 0,
             modifiers: Modifiers::default(),
             focused: true,
@@ -175,7 +181,14 @@ impl Shell {
             let happened = self.drain();
             let due = self.take_due();
             if happened || due {
-                self.frame();
+                // At most one frame a refresh: the input waits in `events` until then.
+                let since = self.last_frame.elapsed();
+                if since < self.min_interval {
+                    self.repaint_at = Some(Instant::now() + (self.min_interval - since));
+                } else {
+                    self.last_frame = Instant::now();
+                    self.frame();
+                }
             }
             self.present_chores();
         }
